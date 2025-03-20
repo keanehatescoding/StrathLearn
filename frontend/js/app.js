@@ -1,4 +1,4 @@
-// frontend/js/app.js
+
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize CodeMirror
     const editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
@@ -164,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Helper function to escape HTML
+
     function escapeHTML(str) {
         return str
             .replace(/&/g, '&amp;')
@@ -174,6 +174,6 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/'/g, '&#039;');
     }
 
-    // Load default challenge on page load
+    
     loadChallenge();
 });
