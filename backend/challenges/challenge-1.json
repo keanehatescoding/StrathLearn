@@ -1,0 +1,25 @@
+{
+    "id": "hello-world",
+    "title": "Hello, World!",
+    "difficulty": "beginner",
+    "description": "Write a C program that prints 'Hello, World!' to the console.",
+    "hints": [
+      "Use the printf function from the stdio.h library",
+      "Don't forget to include the stdio.h header",
+      "Your program should return 0 to indicate successful execution"
+    ],
+    "testCases": [
+      {
+        "id": "test1",
+        "input": "",
+        "expectedOutput": "Hello, World!\n",
+        "hidden": false
+      }
+    ],
+    "initialCode": "#include <stdio.h>\n\nint main() {\n    // Write your code here\n    \n    return 0;\n}",
+    "solutions": [
+      "#include <stdio.h>\n\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}"
+    ],
+    "timeLimit": 1,
+    "memoryLimit": 128
+  }

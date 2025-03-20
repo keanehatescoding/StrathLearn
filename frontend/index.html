@@ -1,0 +1,79 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Challenge Platform</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
+</head>
+<body>
+    <header>
+        <div class="logo">StrathLearn</div>
+        <nav>
+            <ul>
+                <li><a href="#" class="active">Challenges</a></li>
+                <li><a href="#">About</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="challenge-info">
+                <h1 id="challenge-title">Loading challenge...</h1>
+                <div class="challenge-meta">
+                    <span id="challenge-difficulty" class="badge">Beginner</span>
+                </div>
+                <div id="challenge-description" class="description-container"></div>
+                
+                <div class="collapsible">
+                    <button class="collapsible-header">Hints <span class="toggle-icon">+</span></button>
+                    <div class="collapsible-content">
+                        <div id="hints-container"></div>
+                    </div>
+                </div>
+                
+                <div class="collapsible">
+                    <button class="collapsible-header">Test Cases <span class="toggle-icon">+</span></button>
+                    <div class="collapsible-content">
+                        <div id="test-cases-container"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="editor-container">
+                <div class="editor-header">
+                    <h2>Your Code</h2>
+                    <button id="reset-btn" class="secondary-btn">Reset Code</button>
+                </div>
+                <div id="editor-wrapper">
+                    <textarea id="code-editor"></textarea>
+                </div>
+                <div class="editor-footer">
+                    <button id="submit-btn" class="primary-btn">Submit Solution</button>
+                </div>
+                
+                <div id="results-container" class="results" style="display:none;">
+                    <h3>Results</h3>
+                    <div id="test-results"></div>
+                    <div id="success-message" class="success-message" style="display:none;">
+                        <h2>🎉 All tests passed! Congratulations!</h2>
+                        <p>You've successfully completed this challenge.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 StrathLearn- A learning platform for programmers</p>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/clike/clike.min.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

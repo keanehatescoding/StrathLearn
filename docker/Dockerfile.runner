@@ -1,0 +1,8 @@
+
+FROM gcc:latest
+
+WORKDIR /code
+
+VOLUME ["/code"]
+
+# We need a way to limit memory
