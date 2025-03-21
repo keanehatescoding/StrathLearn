@@ -61,7 +61,7 @@ func main() {
 	log.Printf("Current working directory: %s", currentDir)
 
 	// Create challenges directory if it doesn't exist
-	challengesDir := "./challenges"
+	challengesDir := "./backend/challenges"
 	if _, err := os.Stat(challengesDir); os.IsNotExist(err) {
 		log.Printf("Creating challenges directory at %s", challengesDir)
 		if err := os.Mkdir(challengesDir, 0755); err != nil {
@@ -173,7 +173,7 @@ func createSampleChallenge(dir string) {
         "id": "hello-world",
         "title": "Hello, Lol",
         "difficulty": "beginner",
-        "description": "Welcome to your first C programming challenge! Write a simple C program that prints the message 'Hello, World!' to the console.\n\nThis is the traditional first program for beginners in any programming language, and it will help you verify that your development environment is set up correctly.",
+        "description": "Welcome to your first C lol programming challenge! Write a simple C program that prints the message 'Hello, World!' to the console.\n\nThis is the traditional first program for beginners in any programming language, and it will help you verify that your development environment is set up correctly.",
         "hints": [
             "Use the printf function from the stdio.h library to output text",
             "Don't forget to include the stdio.h header at the top of your program",

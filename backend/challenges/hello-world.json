@@ -1,5 +1,5 @@
 {
-  "id": "temperature-converter",
+  "id": "temperature-converter2",
   "title": "Temperature Converter",
   "difficulty": "beginner",
   "description": "Create a C program that converts temperatures between Fahrenheit and Celsius. Your program should prompt the user to enter a temperature value and the unit (F for Fahrenheit or C for Celsius), then display the converted value in the other unit.\n\nFor example, if the user enters '32 F', the program should output '0.0 Celsius'. If the user enters '100 C', the program should output '212.0 Fahrenheit'.",

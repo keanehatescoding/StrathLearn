@@ -1,4 +1,3 @@
-
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize CodeMirror
     const editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
@@ -15,6 +14,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Current challenge data
     let currentChallenge = null;
+
+    // Challenge selector
+    const challengeSelect = document.getElementById('challenge-select');
+    challengeSelect.addEventListener('change', () => {
+        loadChallenge(challengeSelect.value);
+    });
+
+    // First, fetch all available challenges
+    async function fetchChallenges() {
+        try {
+            const response = await fetch('/api/challenges');
+            if (!response.ok) {
+                throw new Error('Failed to load challenges');
+            }
+            
+            const challenges = await response.json();
+            
+            // Clear the dropdown
+            challengeSelect.innerHTML = '';
+            
+            // Add all challenges to the dropdown
+            Object.values(challenges).forEach(challenge => {
+                const option = document.createElement('option');
+                option.value = challenge.id;
+                option.textContent = challenge.title;
+                challengeSelect.appendChild(option);
+            });
+            
+            // Set temperature-converter as selected if available
+            if (challenges['temperature-converter']) {
+                challengeSelect.value = 'temperature-converter';
+                loadChallenge('temperature-converter');
+            } else {
+                // Otherwise load the first challenge
+                loadChallenge(challengeSelect.value);
+            }
+        } catch (error) {
+            console.error('Error fetching challenges:', error);
+        }
+    }
 
     // Collapsible sections
     document.querySelectorAll('.collapsible-header').forEach(header => {
@@ -66,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     testCaseElem.className = 'test-case';
                     testCaseElem.innerHTML = `
                         <p><strong>Input:</strong> ${testCase.input ? `"${testCase.input}"` : '<em>(empty)</em>'}</p>
-                        <p><strong>Expected Output:</strong> "${testCase.expectedOutput.replace(/\n/g, '\\n')}"</p>
+                        <p><strong>Expected Output:</strong> "${testCase.expectedOutput.replace(/\\n/g, '\\\\n')}"</p>
                     `;
                     testCasesContainer.appendChild(testCaseElem);
                 }
@@ -164,7 +203,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-
     function escapeHTML(str) {
         return str
             .replace(/&/g, '&amp;')
@@ -173,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
     }
-
     
-    loadChallenge();
+    // Start by fetching all challenges
+    fetchChallenges();
 });
