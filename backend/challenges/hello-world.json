@@ -1,26 +1,39 @@
 {
-    "id": "hello-world",
-    "title": "Hello, World!",
-    "difficulty": "beginner",
-    "description": "Welcome to your first C programming challenge! Write a simple C program that prints the message 'Hello, World!' to the console.\n\nThis is the traditional first program for beginners in any programming language, and it will help you verify that your development environment is set up correctly.",
-    "hints": [
-      "Use the printf function from the stdio.h library to output text",
-      "Don't forget to include the stdio.h header at the top of your program",
-      "Remember that your main function should return an integer (typically 0 for successful execution)",
-      "In C, strings need to be enclosed in double quotes"
-    ],
-    "testCases": [
-      {
-        "id": "test1",
-        "input": "",
-        "expectedOutput": "Hello, World!\n",
-        "hidden": false
-      }
-    ],
-    "initialCode": "#include <stdio.h>\n\nint main() {\n    // Write your code here\n    \n    return 0;\n}",
-    "solutions": [
-      "#include <stdio.h>\n\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}"
-    ],
-    "timeLimit": 1,
-    "memoryLimit": 128
-  }
+  "id": "temperature-converter",
+  "title": "Temperature Converter",
+  "difficulty": "beginner",
+  "description": "Create a C program that converts temperatures between Fahrenheit and Celsius. Your program should prompt the user to enter a temperature value and the unit (F for Fahrenheit or C for Celsius), then display the converted value in the other unit.\n\nFor example, if the user enters '32 F', the program should output '0.0 Celsius'. If the user enters '100 C', the program should output '212.0 Fahrenheit'.",
+  "hints": [
+    "Use scanf() to read input from the user",
+    "The formula to convert Celsius to Fahrenheit is: F = (C × 9/5) + 32",
+    "The formula to convert Fahrenheit to Celsius is: C = (F - 32) × 5/9",
+    "Use the %.1f format specifier with printf() to display the result with one decimal place",
+    "Check the unit character to determine which conversion to perform"
+  ],
+  "testCases": [
+    {
+      "id": "test1",
+      "input": "32 F",
+      "expectedOutput": "0.0 Celsius\n",
+      "hidden": false
+    },
+    {
+      "id": "test2",
+      "input": "100 C",
+      "expectedOutput": "212.0 Fahrenheit\n",
+      "hidden": false
+    },
+    {
+      "id": "test3",
+      "input": "-40 F",
+      "expectedOutput": "-40.0 Celsius\n",
+      "hidden": false
+    }
+  ],
+  "initialCode": "#include <stdio.h>\n\nint main() {\n    float temperature;\n    char unit;\n    \n    // Write your code here\n    \n    return 0;\n}",
+  "solutions": [
+    "#include <stdio.h>\n\nint main() {\n    float temperature, converted;\n    char unit;\n    \n    // Read temperature and unit\n    scanf(\"%f %c\", &temperature, &unit);\n    \n    // Convert based on the unit\n    if (unit == 'F' || unit == 'f') {\n        converted = (temperature - 32) * 5 / 9;\n        printf(\"%.1f Celsius\\n\", converted);\n    } else if (unit == 'C' || unit == 'c') {\n        converted = (temperature * 9 / 5) + 32;\n        printf(\"%.1f Fahrenheit\\n\", converted);\n    } else {\n        printf(\"Invalid unit. Please use F for Fahrenheit or C for Celsius.\\n\");\n    }\n    \n    return 0;\n}"
+  ],
+  "timeLimit": 1,
+  "memoryLimit": 128
+}

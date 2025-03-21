@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -26,6 +25,7 @@ type Challenge struct {
 	Solutions   []string   `json:"solutions"`
 	TimeLimit   int        `json:"timeLimit"`
 	MemoryLimit int        `json:"memoryLimit"`
+	FilePath    string     `json:"-"` // Track source file path for debugging
 }
 
 type TestCase struct {
@@ -56,13 +56,29 @@ type SubmissionResponse struct {
 var challenges map[string]Challenge
 
 func main() {
+	log.Println("Starting server...")
+	currentDir, _ := os.Getwd()
+	log.Printf("Current working directory: %s", currentDir)
 
-	if _, err := os.Stat("./challenges"); os.IsNotExist(err) {
-		os.Mkdir("./challenges", 0755)
-		createSampleChallenge()
+	// Create challenges directory if it doesn't exist
+	challengesDir := "./challenges"
+	if _, err := os.Stat(challengesDir); os.IsNotExist(err) {
+		log.Printf("Creating challenges directory at %s", challengesDir)
+		if err := os.Mkdir(challengesDir, 0755); err != nil {
+			log.Fatalf("Failed to create challenges directory: %v", err)
+		}
+		createSampleChallenge(challengesDir)
 	}
 
-	challenges = loadChallenges("./challenges")
+	// Load challenges
+	challenges = loadChallenges(challengesDir)
+	log.Printf("Loaded %d challenges", len(challenges))
+
+	// Print loaded challenges for debugging
+	for id, challenge := range challenges {
+		log.Printf("Challenge in memory: ID=%s, Title=%s, Source=%s",
+			id, challenge.Title, challenge.FilePath)
+	}
 
 	corsMiddleware := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -86,10 +102,12 @@ func main() {
 
 	http.HandleFunc("/api/challenge/", func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Path[len("/api/challenge/"):]
+		log.Printf("Request for challenge: %s", id)
 		if challenge, ok := challenges[id]; ok {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(challenge)
 		} else {
+			log.Printf("Challenge not found: %s", id)
 			http.NotFound(w, r)
 		}
 	})
@@ -117,6 +135,27 @@ func main() {
 		})
 	})
 
+	// Add debug endpoint
+	http.HandleFunc("/debug", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "Current directory: %s\n\n", currentDir)
+
+		fmt.Fprintf(w, "Contents of challenges directory:\n")
+		files, err := os.ReadDir(challengesDir)
+		if err != nil {
+			fmt.Fprintf(w, "Error reading challenges dir: %v\n", err)
+		} else {
+			for _, file := range files {
+				fmt.Fprintf(w, "- %s\n", file.Name())
+			}
+		}
+
+		fmt.Fprintf(w, "\nLoaded challenges:\n")
+		for id, challenge := range challenges {
+			fmt.Fprintf(w, "- ID: %s, Title: %s, Source: %s\n",
+				id, challenge.Title, challenge.FilePath)
+		}
+	})
+
 	fs := http.FileServer(http.Dir("./frontend"))
 	http.Handle("/", fs)
 
@@ -129,10 +168,10 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, corsMiddleware(http.DefaultServeMux)))
 }
 
-func createSampleChallenge() {
+func createSampleChallenge(dir string) {
 	challengeJSON := `{
         "id": "hello-world",
-        "title": "Hello, World!",
+        "title": "Hello, Lol",
         "difficulty": "beginner",
         "description": "Welcome to your first C programming challenge! Write a simple C program that prints the message 'Hello, World!' to the console.\n\nThis is the traditional first program for beginners in any programming language, and it will help you verify that your development environment is set up correctly.",
         "hints": [
@@ -157,13 +196,19 @@ func createSampleChallenge() {
         "memoryLimit": 128
     }`
 
-	os.WriteFile("./challenges/hello-world.json", []byte(challengeJSON), 0644)
+	filePath := filepath.Join(dir, "hello-world.json")
+	err := os.WriteFile(filePath, []byte(challengeJSON), 0644)
+	if err != nil {
+		log.Fatalf("Failed to write sample challenge: %v", err)
+	}
+	log.Printf("Created sample challenge at: %s", filePath)
 }
 
 func loadChallenges(dir string) map[string]Challenge {
 	challenges := make(map[string]Challenge)
+	log.Printf("Loading challenges from directory: %s", dir)
 
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		log.Printf("Error reading challenges directory: %v", err)
 		return challenges
@@ -171,25 +216,50 @@ func loadChallenges(dir string) map[string]Challenge {
 
 	for _, file := range files {
 		if filepath.Ext(file.Name()) == ".json" {
-			data, err := ioutil.ReadFile(filepath.Join(dir, file.Name()))
+			filePath := filepath.Join(dir, file.Name())
+			log.Printf("Processing file: %s", filePath)
+
+			data, err := os.ReadFile(filePath)
 			if err != nil {
-				log.Printf("Error reading challenge file %s: %v", file.Name(), err)
+				log.Printf("Error reading file %s: %v", filePath, err)
 				continue
 			}
+
+			// Log a preview of the file content
+			preview := string(data)
+			if len(preview) > 100 {
+				preview = preview[:100] + "..."
+			}
+			log.Printf("File content preview: %s", preview)
 
 			var challenge Challenge
 			if err := json.Unmarshal(data, &challenge); err != nil {
-				log.Printf("Error parsing challenge file %s: %v", file.Name(), err)
+				log.Printf("JSON parse error in %s: %v", filePath, err)
 				continue
 			}
 
+			// Store file path for debugging
+			challenge.FilePath = filePath
+
+			// Ensure ID exists
+			if challenge.ID == "" {
+				log.Printf("Warning: Challenge in %s has no ID, using filename", filePath)
+				challenge.ID = strings.TrimSuffix(file.Name(), filepath.Ext(file.Name()))
+			}
+
+			log.Printf("Loaded challenge from %s: ID=%s, Title=%s",
+				filePath, challenge.ID, challenge.Title)
+
+			// Store challenge by its ID from the file
 			challenges[challenge.ID] = challenge
 		}
 	}
 
+	// Create sample challenge if no challenges found
 	if len(challenges) == 0 {
 		log.Println("No challenges found, creating sample challenge")
-		createSampleChallenge()
+		createSampleChallenge(dir)
+		// Recursive call to load the newly created challenge
 		return loadChallenges(dir)
 	}
 
@@ -198,8 +268,9 @@ func loadChallenges(dir string) map[string]Challenge {
 
 func runTests(code string, challenge Challenge) []TestResult {
 	results := make([]TestResult, 0, len(challenge.TestCases))
+	log.Printf("Running tests for challenge: %s", challenge.ID)
 
-	tempDir, err := ioutil.TempDir("", "challenge-")
+	tempDir, err := os.MkdirTemp("", "challenge-")
 	if err != nil {
 		log.Printf("Failed to create temp dir: %v", err)
 		return []TestResult{{
@@ -213,7 +284,7 @@ func runTests(code string, challenge Challenge) []TestResult {
 	submissionID := uuid.New().String()
 
 	sourcePath := filepath.Join(tempDir, fmt.Sprintf("solution-%s.c", submissionID))
-	if err := ioutil.WriteFile(sourcePath, []byte(code), 0644); err != nil {
+	if err := os.WriteFile(sourcePath, []byte(code), 0644); err != nil {
 		return []TestResult{{
 			TestCaseID: "compile",
 			Passed:     false,
@@ -240,7 +311,7 @@ func runTests(code string, challenge Challenge) []TestResult {
 		cmd := exec.Command(execPath)
 		cmd.Stdin = strings.NewReader(tc.Input)
 
-		// Set a timeout we can discuss this
+		// Set a timeout
 		timeout := time.Duration(challenge.TimeLimit) * time.Second
 		if timeout == 0 {
 			timeout = 5 * time.Second // Default timeout
@@ -255,7 +326,7 @@ func runTests(code string, challenge Challenge) []TestResult {
 			errorChan <- err
 		}()
 
-		//Timeout
+		// Timeout handling
 		select {
 		case output := <-outputChan:
 			err := <-errorChan
@@ -271,7 +342,9 @@ func runTests(code string, challenge Challenge) []TestResult {
 				}
 			}
 		case <-time.After(timeout):
-			cmd.Process.Kill()
+			if cmd.Process != nil {
+				cmd.Process.Kill()
+			}
 			result.Error = "Time limit exceeded"
 		}
 
