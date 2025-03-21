@@ -1,8 +1,10 @@
-
 FROM gcc:latest
 
 WORKDIR /code
 
-VOLUME ["/code"]
+# Install necessary tools
+RUN apt-get update && \
+    apt-get install -y time && \
+    mkdir -p /code
 
-# We need a way to limit memory
+VOLUME ["/code"]

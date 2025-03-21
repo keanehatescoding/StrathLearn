@@ -133,6 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = 'Submitting...';
         
         const code = editor.getValue();
+        console.log(code);
         
         try {
             const response = await fetch('/api/submit', {
