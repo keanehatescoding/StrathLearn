@@ -1,0 +1,28 @@
+{
+  "id": "Single line comments",
+  "title": "Comment",
+  "difficulty": "beginner",
+  "description": "Comments are special way of telling the compiler ignore this line. In C to do a single line comment just add two forward slashes i.e
+  // before the line that you want to comment out e.g. 
+  // printf('Hello World') 
+  Comments are useful because they can be used to explain your code to other programmers, document your program or note down something that is buggy
+  in your code i.e
+  // fix this later",
+  "hints": [
+    "https://www.w3schools.com/c/c_comments.php"
+  ],
+  "testCases": [
+    {
+      "id": "test2",
+      "input": "#include <stdio.h>\\nint main (){\\n// Comment out this print statement\\n//printf('Hello coder!\\n');\\nreturn 0;}",
+      "expectedOutput": "",
+      "hidden": false
+    }
+  ],
+  "initialCode": "#include <stdio.h>\\nint main (){\\n// Comment out this print statement\\nprintf('Hello coder!\\n');\\nreturn 0;}",
+  "solutions": [
+    "#include <stdio.h>\\nint main(){\\n// Comment out this print statement\\n//printf('Hello World!\\n');\\nreturn 0;\\n}";
+  ],
+  "timelimit": 1,
+  "memoryLimit": 128
+}

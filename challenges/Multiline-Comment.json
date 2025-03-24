@@ -1,0 +1,45 @@
+{
+  "id": "Multi-line Comments",
+  "title": "Multi-line Comments",
+  "difficulty": "Easy",
+  "description": "Now that you understand single line comments then its time to learn Multi-line comments. This can be quite useful if you want to
+  Comment out a lot of lines. To begin a multi line comment then start /* and to end a Multi-line comment then end with */. We are going to provide
+  you with a very large code block and we advise you to comment it out using multi line comments","hints": [
+    "https://www.geeksforgeeks.org/c-comments/#multiline-comment-in-c"
+  ],
+  "testCases": [
+    {
+      "id": "test",
+      "input": "#include <stdio.h>\\nint main void(){//Comment out everything from here/*\\n system('/bin/bash');\\nfor(int i = 1,i<=29199322,i--){\\n
+      printf('lf',malloc(*char**));\\n return 69;\\n float chunk*= sizeof(*address);\\nstrlen('/shlsdfdfs');\\nchar str1= 'test',char str2=''\\n
+      strcmp(str1,str2);\\nswitch:\\n case 'a':printf('debug error'); return -1; case 'l*gm@': printf('b@11z');break; case 'kenya': printf('f1t_in');
+      \\ndefault: printf('test');struct test\\n{ char gender;\\nBool nonesense;\\nint* among_us;\\n
+      };\\nfork();\\ntypedef struct\\n{ long long testube;
+      \\nexplode('123')\\n;socket(AF_INET,
+        2,
+        16)\\n;mprotect('123')\\n // end your multi line comment before this line\\n*/return 0;
+      },
+      "expectedOutput": "",
+      "hidden": false
+    ],
+    "InitialCode":"#include <stdio.h>\\nint main void(){//Comment out everything from here\\n system('/bin/bash');\\nfor(int i = 1,i<=29199322,i--){\\n
+      printf('lf',malloc(*char**));\\n return 69;\\n float chunk*= sizeof(*address);\\nstrlen('/shlsdfdfs');\\nchar str1= 'test',char str2=''\\n
+      strcmp(str1,str2);\\nswitch:\\n case 'a':printf('debug error'); return -1; case 'l*gm@': printf('b@11z');break; case 'kenya': printf('f1t_in');
+      \\ndefault: printf('test');struct test\\n{ char gender;\\nBool nonesense;\\nint* among_us;\\n
+    };\\nfork();\\ntypedef struct\\n{ long long testube;
+      \\nexplode('123')\\n;socket(AF_INET,
+      2,
+      16)\\n;mprotect('123')\\n // end your multi line comment before this line\\nreturn 0;",
+"solutions": [
+    "#include <stdio.h>\\nint main void(){//Comment out everything from here/*\\n system('/bin/bash');\\nfor(int i = 1,i<=29199322,i--){\\n
+      printf('lf',malloc(*char**));\\n return 69;\\n float chunk*= sizeof(*address);\\nstrlen('/shlsdfdfs');\\nchar str1= 'test',char str2=''\\n
+      strcmp(str1,str2);\\nswitch:\\n case 'a':printf('debug error'); return -1; case 'l*gm@': printf('b@11z');break; case 'kenya': printf('f1t_in');
+      \\ndefault: printf('test');struct test\\n{ char gender;\\nBool nonesense;\\nint* among_us;\\n
+        };\\nfork();\\ntypedef struct\\n{ long long testube;
+      \\nexplode('123')\\n;socket(AF_INET,
+          2,
+          16)\\n;mprotect('123')\\n // end your multi line comment before this line\\n*/return 0;"
+        ],
+        "timelimit": 1,
+        "memoryLimit": 128
+      }
