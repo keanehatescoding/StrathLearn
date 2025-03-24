@@ -1,0 +1,49 @@
+{
+  "id": "Conditionals",
+  "title": "If Statements",
+  "difficulty": "beginner",
+  "description": "If statements",
+  "hints": [
+    "https://www.programiz.com/c-programming/c-if-else-statement"
+  ],
+  "testCases": [
+    {
+      "id": "test1",
+      "input": "dog",
+      "expectedOutput": "Bark!",
+      "hidden": "false"
+    },
+    {
+      "id": "test2",
+      "input": "cat",
+      "expectedOutput": "Meow!",
+      "hidden": "false"
+    },
+    {
+      "id": "test3",
+      "input": "bird",
+      "expectedOutput": "Chirp!",
+      "hidden": "false"
+    },
+    {
+      "id": "default",
+      "input": "",
+      "expectedOutput": "Invalid Input",
+      "hidden": "false"
+    }
+  ],
+  "initialCode": "#include <stdio.h>\\nint main (){\\n// Comment out this code\\nprintf('Hello coder!\\n');\\nreturn 0;}",
+  "solutions": [
+    '#include <stdio.h> \\nint main(){ \\nchar animal[
+        20
+      ]; \\nscanf("%19s",&animal) \\nif(strcmp(animal,
+      "dog")==0){ \\nprintf("Bark\\n"); \\n
+      }else (strcmp(animal,
+      "cat")==0){ \\nprintf("Meow\\n!"); \\n
+      }else (strcmp(animal,
+      "bird")==0){ \\nprintf("Chirp!\\n") \\n
+      }else{ \\n printf("Invalid input"); \\n
+      }return 0'
+    ],
+    "memoryLimit": 128
+  }
