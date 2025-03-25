@@ -1,0 +1,23 @@
+{
+  "id": "Comments",
+  "title": "Comment",
+  "difficulty": "beginner",
+  "description": "Comments in programming",
+  "hints": [
+    "https://www.w3schools.com/c/c_comments.php"
+  ],
+  "testCases": [
+    {
+    "id": "test2",
+    "input": "",
+    "expectedOutput": "",
+    "hidden": false
+    }
+  ],
+    "initialCode": "#include <stdio.h>\\nint main (){\\n// Comment out this code\\nprintf('Hello coder!\\n');\\nreturn 0;}",
+    "solutions": [
+    "#include <stdio.h>\\nint main(){\\n//printf('Hello World!\\n');\\nreturn 0;\\n}";
+  ],
+    "timelimit": 1,
+    "memoryLimit": 128
+}
