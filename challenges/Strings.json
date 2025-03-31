@@ -1,0 +1,15 @@
+{
+  "id": "Strings",
+  "title": "C strings",
+  "difficulty": "beginner",
+  "description": "Strings in C are weird. This challenge will be a high abstraction of Strings in C\\n. Later on you will learn how strings in C really function.",
+  "hints": [
+    ""
+  ],
+  "testCases": [
+    {
+      "id": "test1",
+      "input": "#inlude <stdio.h>\\nint main(){\\nprintf(\"Hello World\");\\nreturn 0""expectedOutput": ""
+    }
+  ]
+}
