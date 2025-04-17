@@ -1,631 +1,828 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+  import { onMount } from 'svelte';
+  import { toast } from 'svelte-sonner';
+  import { 
+    Code, ChevronRight, ChevronLeft, Terminal, 
+    RotateCcw, Zap, Info, ArrowRight,  
+    Maximize2, Minimize2, Loader, Keyboard,
+    CheckCircle, XCircle, Clock, Award
+  } from 'lucide-svelte';
+  
+  // Import UI components
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { Avatar, AvatarFallback } from "$lib/components/ui/avatar";
+  import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "$lib/components/ui/card";
+  import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "$lib/components/ui/select";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Alert, AlertDescription } from "$lib/components/ui/alert";
+  import { Separator } from "$lib/components/ui/separator";
+  import { Progress } from "$lib/components/ui/progress";
+  import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "$lib/components/ui/accordion";
+  import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "$lib/components/ui/collapsible";
+  import ModeToggle from "$lib/components/mode-toggle.svelte";
+  import * as Tooltip from "$lib/components/ui/tooltip";
+
+  // Type definitions
+  interface Challenge {
+    id: string;
+    title: string;
+    difficulty: string;
+    description: string;
+    hints: string[];
+    testCases: TestCase[];
+    initialCode: string;
+    solutions?: string[];
+    timeLimit?: number;
+    memoryLimit?: number;
+    category?: string;
+    points?: number;
+  }
+
+  interface TestCase {
+    id: string;
+    input: string;
+    expectedOutput: string;
+    hidden: boolean;
+  }
+
+  interface TestResult {
+    testCaseId: string;
+    passed: boolean;
+    output?: string;
+    error?: string;
+    executionTime?: number;
+  }
+
+
+// Then use it
+
+
+  // State variables
+  let challenges: Record<string, Challenge> = {};
+  let challengeIds: string[] = [];
+  let currentChallenge: Challenge | null = null;
+  let currentChallengeIndex: number = 0;
+  let code: string = '';
+  let editor: any;
+  let testResults: TestResult[] = [];
+  let showResults: boolean = false;
+  let submitting: boolean = false;
+  let editorTheme: string = 'github-dark';
+  let isFullScreen: boolean = false;
+  let progress: number = 0;
+  let editorHeight: string = '100%';
+  let showHints: boolean = false;
+  
+  // Editor themes
+  const editorThemes = [
+    { value: 'vs-dark', label: 'VS Dark' },
+    { value: 'github-dark', label: 'GitHub Dark' },
+    { value: 'dracula', label: 'Dracula' },
+    { value: 'nord', label: 'Nord' },
+    { value: 'ayu-dark', label: 'Ayu Dark' },
+    { value: 'tomorrow-night', label: 'Tomorrow Night' }
+  ];
+
+  // Initialization on component mount
+  onMount(async () => {
+    await fetchChallenges();
+    
+    const textarea = document.getElementById('code-editor');
+    
+    if (!textarea) {
+      console.error("Editor element not found");
+      toast.error("Failed to initialize editor");
+      return;
+    }
     
 
-    interface Challenge {
-      id: string;
-      title: string;
-      difficulty: string;
-      description: string;
-      hints: string[];
-      testCases: TestCase[];
-      initialCode: string;
-      solutions?: string[];
-      timeLimit?: number;
-      memoryLimit?: number;
-    }
-  
-    interface TestCase {
-      id: string;
-      input: string;
-      expectedOutput: string;
-      hidden: boolean;
-    }
-  
-    interface TestResult {
-      testCaseId: string;
-      passed: boolean;
-      output?: string;
-      error?: string;
-    }
-  
-
-    let challenges: Record<string, Challenge> = {};
-    let currentChallenge: Challenge | null = null;
-    let selectedChallengeId: string = '';
-    let code: string = '';
-    let editor: any;
-    let testResults: TestResult[] = [];
-    let showResults: boolean = false;
-    let showSuccessMessage: boolean = false;
-    let submitting: boolean = false;
-    let theme: string = 'github-dark';
     
+    // Wait for Monaco to load
+    if (typeof monaco === 'undefined') {
+      window.require(['vs/editor/editor.main'], initEditor);
 
-    let hintsOpen = false;
-    let testCasesOpen = false;
+    } else {
+      initEditor();
+
+     
+    }
+
+    // Add keyboard listeners
+    window.addEventListener('keydown', handleKeyboardShortcuts);
     
-    onMount(async () => {
-      await fetchChallenges();
-      
-
-      const textarea = document.getElementById('code-editor') as HTMLTextAreaElement;
-      
-      // @ts-ignore - CodeMirror is loaded from CDN
-      editor = CodeMirror.fromTextArea(textarea, {
-        mode: 'text/x-csrc',
-        theme: theme,
-        lineNumbers: true,
-        autoCloseBrackets: true,
-        matchBrackets: true,
-        indentUnit: 4,
+    // Initial progress calculation
+    updateProgress();
+    
+    // Clean up on component destruction
+    return () => {
+      window.removeEventListener('keydown', handleKeyboardShortcuts);
+      if (editor) editor.dispose();
+    };
+  });
+  
+  // Initialize Monaco editor
+  function initEditor() {
+    try {
+      monaco.editor.defineTheme('github-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '6a737d' },
+        { token: 'keyword', foreground: 'ff7b72' },
+        { token: 'string', foreground: 'a5d6ff' },
+        { token: 'number', foreground: '79c0ff' },
+        { token: 'regexp', foreground: 'a5d6ff' },
+        { token: 'operator', foreground: 'ff7b72' },
+        { token: 'namespace', foreground: 'ff7b72' },
+        { token: 'type.identifier', foreground: '79c0ff' },
+        { token: 'identifier', foreground: 'c9d1d9' },
+        { token: 'variable', foreground: 'ffa657' },
+        { token: 'variable.predefined', foreground: '79c0ff' },
+        { token: 'function', foreground: 'd2a8ff' },
+      ],
+      colors: {
+        'editor.background': '#0d1117',
+        'editor.foreground': '#c9d1d9',
+        'editorCursor.foreground': '#c9d1d9',
+        'editor.lineHighlightBackground': '#161b22',
+        'editorLineNumber.foreground': '#6e7681',
+        'editor.selectionBackground': '#3b5070',
+        'editor.inactiveSelectionBackground': '#282e33'
+      }
+    });
+      editor = monaco.editor.create(document.getElementById('code-editor'), {
+        value: code,
+        language: 'c',
+        theme: editorTheme,
+        automaticLayout: true,
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        fontSize: 14,
+        fontFamily: '"JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
+        lineNumbers: 'on',
+        renderLineHighlight: 'all',
+        wordWrap: 'on',
         tabSize: 4,
-        indentWithTabs: true,
-        lineWrapping: true,
-        foldGutter: true,
-        gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
-        highlightSelectionMatches: {showToken: /\w/, annotateScrollbar: true},
-        scrollbarStyle: "overlay",
-        extraKeys: {
-          "Tab": "indentMore", 
-          "Shift-Tab": "indentLess",
-          "Ctrl-Space": "autocomplete"
-        },
-        hintOptions: {
-          completeSingle: false
-        }
+        glyphMargin: true,
+        bracketPairColorization: { enabled: true },
+        "semanticHighlighting.enabled": true,
+        formatOnPaste: true,
+        formatOnType: true
       });
       
-      editor.on('change', () => {
+      
+      editor.onDidChangeModelContent(() => {
         code = editor.getValue();
       });
       
-      //Autocomplete
-      editor.on("inputRead", function(cm, change) {
-        if (change.origin !== '+input') return;
-        const cur = editor.getCursor();
-        const token = editor.getTokenAt(cur);
-        
-        if (token.type !== null && token.string.length > 1) {
-          // @ts-ignore
-          CodeMirror.commands.autocomplete(editor, null, { completeSingle: false });
-        }
+      // Ensure editor layouts properly when resized
+      const resizeObserver = new ResizeObserver(() => {
+        if (editor) editor.layout();
       });
-    });
-    
-    async function fetchChallenges() {
-      try {
-        const response = await fetch('/api/challenges');
-        if (!response.ok) {
-          throw new Error('Failed to load challenges');
-        }
-        
-        challenges = await response.json();
-        
+      
+      resizeObserver.observe(document.getElementById('code-editor'));
+      
+    } catch (error) {
+      console.error("Error initializing editor:", error);
+      toast.error("Failed to initialize code editor. Please refresh the page.");
+    }
+  }
   
-       
-          selectedChallengeId = Object.keys(challenges)[0];
-        
-        
-        if (selectedChallengeId) {
-          await loadChallenge(selectedChallengeId);
-        }
-      } catch (error) {
-        console.error('Error fetching challenges:', error);
-      }
+  // Handle keyboard shortcuts
+  function handleKeyboardShortcuts(e: KeyboardEvent) {
+    // Ctrl+Enter or Cmd+Enter to submit
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      submitCode();
     }
     
-    async function loadChallenge(id: string) {
-      try {
-        const response = await fetch(`/api/challenge/${id}`);
-        if (!response.ok) {
-          throw new Error('Challenge not found');
-        }
-        
-        currentChallenge = await response.json();
-        const formattedCode = currentChallenge?.initialCode.replace(/\\n/g, '\n');
-        code = formattedCode!;
-        
-        if (editor) {
-          editor.setValue(formattedCode);
-        }
-        
-   
-        showResults = false;
-        showSuccessMessage = false;
-        testResults = [];
-        
-      } catch (error) {
-        console.error('Error loading challenge:', error);
-        currentChallenge = null;
-      }
+    // Ctrl+S or Cmd+S to save
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      saveCodeToLocalStorage();
+      toast.success('Code saved');
     }
     
-    async function submitCode() {
-      if (!currentChallenge) {
-        alert('No challenge loaded');
-        return;
+    // F11 for fullscreen
+    if (e.key === 'F11') {
+      e.preventDefault();
+      toggleFullScreen();
+    }
+  }
+  
+  // Update progress indicator
+  function updateProgress() {
+    if (!challengeIds.length) return;
+    progress = ((currentChallengeIndex + 1) / challengeIds.length) * 100;
+  }
+  
+  // Fetch all challenges from API
+  async function fetchChallenges() {
+    try {
+      // Show loading toast
+      const toastId = toast.loading('Loading challenges...');
+      
+      const response = await fetch('https://api.singularity.co.ke/api/challenges');
+      if (!response.ok) {
+        throw new Error('Failed to load challenges');
       }
       
-      submitting = true;
+      challenges = await response.json();
+      challengeIds = Object.keys(challenges);
       
-      try {
+      if (challengeIds.length > 0) {
+        currentChallengeIndex = 0;
+        await loadChallenge(challengeIds[currentChallengeIndex]);
+        toast.dismiss(toastId);
+        toast.success('Challenges loaded successfully');
+      } else {
+        toast.dismiss(toastId);
+        toast.error('No challenges found');
+      }
+    } catch (error) {
+      console.error('Error fetching challenges:', error);
+      toast.error('Failed to load challenges');
+    }
+  }
   
-        if (editor) {
-          code = editor.getValue();
-        }
-        
-        const response = await fetch('/api/submit', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            challengeId: currentChallenge.id,
-            code: code
-          })
-        });
-        
-        const result = await response.json();
-        
-        showResults = true;
-        testResults = result.testResults || [];
-        
-   
-        showSuccessMessage = testResults.length > 0 && testResults.every(test => test.passed);
-        
-      } catch (error) {
-        console.error('Error submitting code:', error);
-        alert('Error submitting code. Please try again.');
-      } finally {
-        submitting = false;
+  // Load a specific challenge by ID
+  async function loadChallenge(id: string) {
+    try {
+      const toastId = toast.loading('Loading challenge...');
+      
+      const response = await fetch(`https://api.singularity.co.ke/api/challenge/${id}`);
+      if (!response.ok) {
+        throw new Error('Challenge not found');
       }
-    }
-    
-    function resetCode() {
-      if (currentChallenge && confirm('Are you sure you want to reset your code to the initial state?')) {
-        const formattedCode = currentChallenge.initialCode.replace(/\\n/g, '\n');
-        code = formattedCode;
-        
-        if (editor) {
-          editor.setValue(formattedCode);
-        }
-      }
-    }
-    
-    function toggleHints() {
-      hintsOpen = !hintsOpen;
-    }
-    
-    function toggleTestCases() {
-      testCasesOpen = !testCasesOpen;
-    }
-    
-    function handleChallengeSelect() {
-      if (selectedChallengeId) {
-        loadChallenge(selectedChallengeId);
-      }
-    }
-    
-    function changeTheme(newTheme: string) {
-      theme = newTheme;
+      
+      currentChallenge = await response.json();
+      
+      // Format the code and set it in the editor
+      const formattedCode = currentChallenge?.initialCode.replace(/\\n/g, '\n');
+      code = formattedCode!;
+      
       if (editor) {
-        editor.setOption('theme', newTheme);
+        // Set language to C
+        monaco.editor.setModelLanguage(editor.getModel(), 'c');
+        editor.setValue(formattedCode);
+      }
+      
+      // Check if we have saved code for this challenge
+      const savedCode = localStorage.getItem(`c_master_challenge_${id}`);
+      if (savedCode) {
+        code = savedCode;
+        if (editor) {
+          editor.setValue(savedCode);
+        }
+      }
+      
+      // Reset state
+      showResults = false;
+      testResults = [];
+      showHints = false;
+      
+
+      updateProgress();
+      
+      toast.dismiss(toastId);
+    } catch (error) {
+      console.error('Error loading challenge:', error);
+      toast.error('Error loading challenge');
+      currentChallenge = null;
+    }
+  }
+  
+
+  // Around line 250, update the submitCode function
+async function submitCode() {
+  console.log('Trying to submit code...'); // Debug log
+  
+  if (!currentChallenge) {
+    console.log('No challenge loaded'); // Debug log
+    toast.error('No challenge loaded');
+    return;
+  }
+
+  submitting = true; // Set submitting state
+  console.log('Setting submitting state'); // Debug log
+
+  try {
+    if (editor) {
+      code = editor.getValue();
+      console.log('Got code from editor:', code.substring(0, 100) + '...'); // Debug log
+    }
+
+    const response = await fetch('https://api.singularity.co.ke/api/submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        challengeId: currentChallenge.id,
+        code: code
+      })
+    });
+
+    console.log('Response status:', response.status); // Debug log
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('Got result:', result); // Debug log
+
+    showResults = true;
+    testResults = result.testResults || [];
+
+    // Scroll to results
+    setTimeout(() => {
+      const resultsSection = document.getElementById('results-section');
+      if (resultsSection) {
+        resultsSection.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 100);
+
+  } catch (error) {
+    console.error('Error submitting code:', error);
+    toast.error('Error submitting code. Please try again.');
+  } finally {
+    submitting = false;
+  }
+}
+  
+  // Reset code to initial state
+  function resetCode() {
+    if (currentChallenge && confirm('Are you sure you want to reset your code to the initial state?')) {
+      const formattedCode = currentChallenge.initialCode.replace(/\\n/g, '\n');
+      code = formattedCode;
+      
+      if (editor) {
+        editor.setValue(formattedCode);
+      }
+      
+      toast.info('Code has been reset to initial state');
+    }
+  }
+  
+  // Save code to local storage
+  function saveCodeToLocalStorage() {
+    if (currentChallenge) {
+      localStorage.setItem(`c_master_challenge_${currentChallenge.id}`, code);
+    }
+  }
+  
+  // Change editor theme
+  function changeEditorTheme(newTheme: string) {
+    editorTheme = newTheme;
+    if (editor) {
+      monaco.editor.setTheme(newTheme);
+      toast.success(`Theme changed to ${newTheme}`);
+    }
+  }
+  
+  // Navigate between challenges
+  function navigateToChallenge(direction: 'prev' | 'next') {
+    saveCodeToLocalStorage();
+    
+    if (direction === 'next' && currentChallengeIndex < challengeIds.length - 1) {
+      currentChallengeIndex++;
+      loadChallenge(challengeIds[currentChallengeIndex]);
+    } else if (direction === 'prev' && currentChallengeIndex > 0) {
+      currentChallengeIndex--;
+      loadChallenge(challengeIds[currentChallengeIndex]);
+    }
+  }
+  
+  // Toggle fullscreen mode
+  function toggleFullScreen() {
+    isFullScreen = !isFullScreen;
+    
+    const appContainer = document.getElementById('c-master-app');
+    
+    if (isFullScreen) {
+      // Enter fullscreen
+      if (appContainer?.requestFullscreen) {
+        appContainer.requestFullscreen();
+      }
+    } else {
+      // Exit fullscreen
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
       }
     }
-  </script>
-  
-  <svelte:head>
-    <title>StrathLearn - Code Challenge Platform</title>
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/github-dark.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material-palenight.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/fold/foldgutter.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/hint/show-hint.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/scroll/simplescrollbars.min.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/clike/clike.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/closebrackets.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/matchbrackets.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/fold/foldcode.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/fold/foldgutter.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/fold/brace-fold.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/hint/show-hint.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/hint/anyword-hint.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/search/searchcursor.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/search/match-highlighter.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/scroll/simplescrollbars.min.js"></script>
-  </svelte:head>
+    // Ensure editor resizes properly
+    setTimeout(() => {
+      if (editor) editor.layout();
+    }, 100);
+  }
   
-  <div class="min-h-screen bg-slate-100 flex flex-col">
-    <header class="bg-gradient-to-r from-slate-800 to-slate-900 text-white shadow-md">
-      <div class="container mx-auto px-4 py-4 flex justify-between items-center">
-        <div class="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-          </svg>
-          StrathLearn
-        </div>
-        <nav>
-          <ul class="flex space-x-8">
-            <li><a href="/" class="hover:text-blue-300 font-medium text-blue-100 transition">Challenges</a></li>
-            <li><a href="#" class="hover:text-blue-300 text-white/80 transition">Leaderboard</a></li>
-            <li><a href="#" class="hover:text-blue-300 text-white/80 transition">About</a></li>
-          </ul>
-        </nav>
-      </div>
-    </header>
+  // Get appropriate color for difficulty badge
+  function getDifficultyColor(difficulty: string) {
+    switch(difficulty.toLowerCase()) {
+      case 'easy': return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300';
+      case 'medium': return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300';
+      case 'hard': return 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300';
+      default: return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300';
+    }
+  }
+</script>
+
+<svelte:head>
+  <title>Codex</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   
-    <main class="flex-grow">
-      <div class="container mx-auto px-4 py-8">
-        <div class="mb-6 flex items-center justify-between flex-wrap gap-4">
-          <div class="flex-1 max-w-xs">
-            <label for="challenge-select" class="block text-sm font-medium text-slate-700 mb-2">Select Challenge:</label>
-            <select 
-              id="challenge-select"
-              class="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white"
-              bind:value={selectedChallengeId}
-              on:change={handleChallengeSelect}
-            >
-              {#each Object.entries(challenges) as [id, challenge]}
-                <option value={id}>{challenge.title}</option>
-              {/each}
-            </select>
+  <!-- Monaco Editor CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/editor/editor.main.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+  <script>
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+    window.MonacoEnvironment = {
+      getWorkerUrl: function(workerId, label) {
+        return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+          self.MonacoEnvironment = {
+            baseUrl: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/'
+          };
+          importScripts('https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/base/worker/workerMain.js');`
+        )}`;
+      }
+    };
+    require(['vs/editor/editor.main']);
+  </script>
+</svelte:head>
+
+<div id="c-master-app" class="h-screen w-full flex flex-col bg-background">
+
+  <!-- Main content with LeetCode-style layout -->
+  <div class="flex-1 flex overflow-hidden">
+    {#if currentChallenge}
+      <!-- Problem description panel (left) -->
+      <div class="w-[450px] flex flex-col border-r overflow-hidden">
+        <!-- Challenge navigation -->
+        <div class="border-b px-4 py-3 flex items-center justify-between bg-muted/30">
+          <div class="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={currentChallengeIndex === 0} onclick={() => navigateToChallenge('prev')}>
+              <ChevronLeft class="h-4 w-4 mr-1" />
+              Previous
+            </Button>
+            
+            <Button variant="outline" size="sm" disabled={currentChallengeIndex === challengeIds.length - 1} onclick={() => navigateToChallenge('next')}>
+              Next
+              <ChevronRight class="h-4 w-4 ml-1" />
+            </Button>
           </div>
           
-          <div class="flex-1 max-w-xs">
-            <label for="theme-select" class="block text-sm font-medium text-slate-700 mb-2">Editor Theme:</label>
-            <select 
-              id="theme-select"
-              class="block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white"
-              bind:value={theme}
-              on:change={() => changeTheme(theme)}
-            >
-              <option value="github-dark">GitHub Dark</option>
-              <option value="material-palenight">Material Palenight</option>
-              <option value="dracula">Dracula</option>
-            </select>
+          <div class="flex items-center">
+            <span class="text-sm font-medium">
+              {currentChallengeIndex + 1}/{challengeIds.length}
+            </span>
+            <Progress value={progress} class="w-20 h-1.5 ml-2" />
           </div>
         </div>
         
-        {#if currentChallenge}
-          <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <div class="bg-gradient-to-r from-slate-50 to-white p-6 border-b border-slate-200">
-                <h1 class="text-2xl font-bold mb-2 text-slate-800">{currentChallenge.title}</h1>
-                <div class="mb-4">
-                  <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold 
-                    {currentChallenge.difficulty === 'Easy' ? 'bg-green-100 text-green-800' : 
-                    currentChallenge.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 
-                    'bg-red-100 text-red-800'}">
-                    {currentChallenge.difficulty}
-                  </span>
-                </div>
+        <!-- Challenge details -->
+        <div class="flex-1 overflow-y-auto p-4">
+          <div class="space-y-6">
+            <!-- Challenge title and metadata -->
+            <div>
+              <h2 class="text-2xl font-bold mb-2">{currentChallenge.title}</h2>
+              
+              <div class="flex flex-wrap gap-2 mb-4">
+                <Badge class={getDifficultyColor(currentChallenge.difficulty)}>
+                  {currentChallenge.difficulty}
+                </Badge>
                 
-                <div class="prose prose-slate mb-6 max-w-none">
-                  {@html currentChallenge.description.replace(/\n/g, '<br>')}
-                </div>
+                {#if currentChallenge.category}
+                  <Badge variant="outline">{currentChallenge.category}</Badge>
+                {/if}
                 
-       
-                <div class="mb-4 border rounded-lg overflow-hidden shadow-sm">
-                  <button 
-                    class="w-full flex justify-between items-center p-3 bg-blue-50 hover:bg-blue-100 text-left font-medium text-blue-700 transition-colors"
-                    on:click={toggleHints}
-                  >
-                    <div class="flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                      </svg>
-                      Hints
-                    </div>
-                    <span class="text-xl">{hintsOpen ? '−' : '+'}</span>
-                  </button>
-                  
-                  {#if hintsOpen}
-                    <div class="p-4 space-y-2 bg-white">
-                      {#each currentChallenge.hints as hint, i}
-                        <div class="p-3 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-700 rounded">
-                          <p class="font-medium mb-1">Hint {i + 1}:</p>
-                          {hint}
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                </div>
+                {#if currentChallenge.points}
+                  <Badge variant="secondary">
+                    <Award class="h-3.5 w-3.5 mr-1" />
+                    {currentChallenge.points} pts
+                  </Badge>
+                {/if}
                 
-
-                <div class="border rounded-lg overflow-hidden shadow-sm">
-                  <button 
-                    class="w-full flex justify-between items-center p-3 bg-purple-50 hover:bg-purple-100 text-left font-medium text-purple-700 transition-colors"
-                    on:click={toggleTestCases}
-                  >
-                    <div class="flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                      </svg>
-                      Test Cases
-                    </div>
-                    <span class="text-xl">{testCasesOpen ? '−' : '+'}</span>
-                  </button>
-                  
-                  {#if testCasesOpen}
-                    <div class="p-4 space-y-4 bg-white">
-                      {#each currentChallenge.testCases.filter(tc => !tc.hidden) as testCase, i}
-                        <div class="border rounded-lg p-4 bg-gray-50 shadow-sm">
-                          <p class="text-xs uppercase tracking-wider text-gray-500 mb-2 font-semibold">Test Case {i + 1}</p>
-                          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <p class="font-medium text-sm text-gray-700 mb-1">Input:</p>
-                              <div class="font-mono text-sm bg-white p-2 rounded border">
-                                {testCase.input ? `"${testCase.input}"` : '<em>(empty)</em>'}
-                              </div>
-                            </div>
-                            <div>
-                              <p class="font-medium text-sm text-gray-700 mb-1">Expected Output:</p>
-                              <div class="font-mono text-sm bg-white p-2 rounded border">
-                                "{testCase.expectedOutput.replace(/\\n/g, '\\\\n')}"
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                </div>
-              </div>
-            </div>
-            
-            <div class="lg:col-span-3 flex flex-col">
-              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-grow flex flex-col">
-                <div class="flex justify-between items-center px-6 py-4 border-b border-slate-200 bg-slate-50">
-                  <h2 class="text-lg font-semibold text-slate-800 flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                    </svg>
-                    Your Code
-                  </h2>
-                  <div class="flex space-x-2 items-center">
-                    <span class="text-xs text-slate-500">Ctrl+Space for autocomplete</span>
-                    <button 
-                      on:click={resetCode}
-                      class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 rounded text-sm font-medium text-slate-700 transition-colors flex items-center"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Reset
-                    </button>
-                  </div>
-                </div>
-                
-                <div class="h-[500px] border-b border-slate-200 flex-grow">
-                  <textarea id="code-editor" class="hidden">{code}</textarea>
-                </div>
-                
-                <div class="p-4 bg-slate-50 border-t border-slate-200">
-                  <button 
-                    on:click={submitCode} 
-                    disabled={submitting}
-                    class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                  >
-                    {#if submitting}
-                      <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Submitting...
-                    {:else}
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                      </svg>
-                      Run & Submit Solution
-                    {/if}
-                  </button>
-                </div>
-                
-                {#if showResults}
-                  <div class="p-6 border-t border-slate-200">
-                    <h3 class="text-lg font-semibold mb-4 text-slate-800 flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      Test Results
-                    </h3>
-                    
-                    <div class="space-y-4">
-                      {#each testResults as result, i}
-                        <div class={`border rounded-lg p-4 ${result.passed ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                          <div class="flex justify-between items-center mb-2">
-                            <h4 class="font-medium flex items-center">
-                              {result.passed ? 
-                                '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-green-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>' : 
-                                '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-red-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>'
-                              }
-                              Test Case {i + 1}: {result.passed ? 'PASSED' : 'FAILED'}
-                            </h4>
-                            <span class={`text-xs font-semibold px-2 py-1 rounded-full ${result.passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                              {result.passed ? 'Success' : 'Error'}
-                            </span>
-                          </div>
-                          
-                          {#if result.error}
-                            <div class="mt-3">
-                              <p class="text-sm font-medium text-red-700 mb-1">Error Message:</p>
-                              <pre class="mt-2 p-3 bg-white rounded-lg border border-red-200 text-sm overflow-x-auto whitespace-pre-wrap text-red-600 font-mono">{result.error}</pre>
-                            </div>
-                          {/if}
-                          
-                          {#if result.output !== undefined}
-                            <div class="mt-3">
-                              <p class="text-sm font-medium text-slate-700 mb-1">Your Output:</p>
-                              <pre class="p-3 bg-white rounded-lg border border-slate-200 text-sm overflow-x-auto whitespace-pre-wrap font-mono">{result.output}</pre>
-                            </div>
-                          {/if}
-                        </div>
-                      {/each}
-                    </div>
-                    
-                    {#if showSuccessMessage}
-                      <div class="mt-6 p-5 bg-green-50 border border-green-200 rounded-lg shadow-sm">
-                        <div class="flex items-center">
-                          <div class="flex-shrink-0">
-                            <svg class="h-10 w-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
-                          </div>
-                          <div class="ml-4">
-                            <h2 class="text-xl font-bold text-green-800">All tests passed! Congratulations!</h2>
-                            <p class="text-green-700 mt-1">You've successfully completed this challenge.</p>
-                          </div>
-                        </div>
-                      </div>
-                    {/if}
-                  </div>
+                {#if currentChallenge.timeLimit}
+                  <Badge variant="outline">
+                    <Clock class="h-3.5 w-3.5 mr-1" />
+                    {currentChallenge.timeLimit}ms
+                  </Badge>
                 {/if}
               </div>
             </div>
+            
+            <!-- Challenge description -->
+            <div class="prose dark:prose-invert max-w-none">
+              {@html currentChallenge.description.replace(/\n/g, '<br>')}
+            </div>
+            
+            <Separator />
+            
+            <!-- Test cases -->
+            <div>
+              <h3 class="text-lg font-semibold mb-3 flex items-center">
+                <Terminal class="h-4 w-4 mr-2" />
+                Test Cases
+              </h3>
+              
+              <div class="space-y-4">
+                {#each currentChallenge.testCases.filter(tc => !tc.hidden) as testCase, i}
+                  <Card>
+                    <CardHeader class="py-2 px-4">
+                      <CardTitle class="text-sm">Example {i + 1}</CardTitle>
+                    </CardHeader>
+                    <CardContent class="py-3 px-4">
+                      <div class="space-y-3">
+                        <div>
+                          <p class="text-sm font-medium mb-1">Input:</p>
+                          <div class="font-mono text-xs bg-muted/50 p-2 rounded overflow-x-auto">
+                            {testCase.input ? testCase.input : '(empty)'}
+                          </div>
+                        </div>
+                        <div>
+                          <p class="text-sm font-medium mb-1">Expected Output:</p>
+                          <div class="font-mono text-xs bg-muted/50 p-2 rounded overflow-x-auto">
+                            {testCase.expectedOutput}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                {/each}
+              </div>
+            </div>
+            
+            <!-- Hints (collapsible) -->
+            {#if currentChallenge.hints && currentChallenge.hints.length > 0}
+              <Separator />
+              
+              <Collapsible open={showHints} onOpenChange={(open) => showHints = open}>
+                <div class="flex items-center justify-between">
+                  <h3 class="text-lg font-semibold flex items-center">
+                    <Info class="h-4 w-4 mr-2" />
+                    Hints
+                  </h3>
+                  
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm">
+                      {#if showHints}
+                        <ChevronRight class="h-4 w-4 rotate-90 transition-transform" />
+                      {:else}
+                        <ChevronRight class="h-4 w-4 transition-transform" />
+                      {/if}
+                    </Button>
+                  </CollapsibleTrigger>
+                </div>
+                
+                <CollapsibleContent>
+                  <div class="space-y-2 mt-3">
+                    <Alert variant="warning" class="bg-amber-50 dark:bg-amber-950/20">
+                      <AlertDescription>
+                        Hints can help you solve this challenge, but using them might reduce points earned.
+                      </AlertDescription>
+                    </Alert>
+                    
+                    {#each currentChallenge.hints as hint, i}
+                      <Accordion type="single" collapsible class="w-full">
+                        <AccordionItem value={`hint-${i}`}>
+                          <AccordionTrigger class="text-sm">Hint {i + 1}</AccordionTrigger>
+                          <AccordionContent>
+                            <p class="text-sm">{hint}</p>
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                    {/each}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            {/if}
           </div>
-        {:else}
-          <div class="text-center py-16 bg-white rounded-xl shadow-sm border border-slate-200">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-slate-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <p class="text-xl text-slate-600">Loading challenge...</p>
+        </div>
+      </div>
+      
+      <!-- Code editor and results (right) -->
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- Editor toolbar -->
+        <div class="border-b bg-muted/20 px-4 py-2 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="font-semibold">Solution.c</span>
+            <Badge>C</Badge>
+          </div>
+          
+          <div class="flex items-center gap-2">
+            <Tooltip.Root>
+              <Tooltip.Trigger asChild>
+               
+                <button class="flex align-middle items-center border px-2 py-1 border-gray-200 rounded-md" on:click={()=>resetCode()}>
+                  <RotateCcw class="h-4 w-4 mr-1" />
+                  Reset
+                </button>
+              </Tooltip.Trigger>
+              <Tooltip.Content>Reset to starter code</Tooltip.Content>
+            </Tooltip.Root>
+            
+            <Tooltip.Root>
+              <Tooltip.Trigger asChild>
+                <button class="flex align-middle items-center border px-2 py-1 border-gray-200 rounded-md" on:click={()=>toggleFullScreen()}>
+                  {#if isFullScreen}
+                    <Minimize2 class="h-4 w-4 mr-1" />
+                    Exit Fullscreen
+                  {:else}
+                    <Maximize2 class="h-4 w-4 mr-1" />
+                    Fullscreen
+                  {/if}
+                </button>
+              </Tooltip.Trigger>
+              <Tooltip.Content>Toggle fullscreen (F11)</Tooltip.Content>
+            </Tooltip.Root>
+          </div>
+        </div>
+        
+
+        <div class="flex-1 overflow-hidden relative">
+          <div id="code-editor" class="absolute inset-0"></div>
+        </div>
+        
+ 
+        <div class="border-t bg-muted/20 p-2 flex items-center justify-between">
+          <div class="text-xs text-muted-foreground flex items-center">
+            <Keyboard class="h-3 w-3 mr-1" />
+            <span>Ctrl+Enter to run | Ctrl+S to save</span>
+          </div>
+          
+   
+   <button 
+   on:click={() => submitCode()}
+   disabled={submitting} 
+   class="inline-flex items-center justify-center rounded-md text-sm font-medium bg-green-600 hover:bg-green-700 text-white px-4 py-2"
+ >
+   {#if submitting}
+     <Loader class="h-4 w-4 mr-2 animate-spin" />
+     Compiling...
+   {:else}
+     <Zap class="h-4 w-4 mr-2" />
+     Run Code
+   {/if}
+ </button>
+        </div>
+        
+      
+        <div id="results-section" class="border-t overflow-y-auto" style="max-height: 40%;">
+          {#if showResults && testResults.length > 0}
+            <div class="p-4">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold flex items-center">
+                  <Terminal class="h-5 w-5 mr-2" />
+                  Test Results
+                </h3>
+                
+                <div class="flex items-center">
+                  <span class="text-sm font-medium mr-2">
+                    {testResults.filter(r => r.passed).length}/{testResults.length} tests passed
+                  </span>
+                  <Progress 
+                    value={(testResults.filter(r => r.passed).length / testResults.length) * 100} 
+                    class="w-20 h-2" 
+                    indicatorClass={testResults.every(t => t.passed) ? "bg-green-600" : "bg-amber-500"}
+                  />
+                </div>
+              </div>
+              
+              <div class="space-y-3">
+                {#each testResults as result, i}
+                  <Card class={result.passed ? 
+                    "border-green-200 dark:border-green-800" : 
+                    "border-red-200 dark:border-red-800"}>
+                    <CardHeader class="py-2 px-4 flex flex-row items-center justify-between">
+                      <CardTitle class="text-sm flex items-center">
+                        {#if result.passed}
+                          <CheckCircle class="h-4 w-4 mr-2 text-green-600 dark:text-green-500" />
+                          <span class="text-green-700 dark:text-green-400">Test {i + 1} Passed</span>
+                        {:else}
+                          <XCircle class="h-4 w-4 mr-2 text-red-600 dark:text-red-500" />
+                          <span class="text-red-700 dark:text-red-400">Test {i + 1} Failed</span>
+                        {/if}
+                      </CardTitle>
+                      
+                      {#if result.executionTime !== undefined}
+                        <Badge variant="outline" class="ml-auto">
+                          <Clock class="h-3 w-3 mr-1" />
+                          {result.executionTime}ms
+                        </Badge>
+                      {/if}
+                    </CardHeader>
+                    
+                    <Collapsible>
+                      <CollapsibleTrigger class="flex items-center justify-center w-full py-1 hover:bg-muted/50 text-xs text-muted-foreground">
+                        <ChevronRight class="h-4 w-4 rotate-90 transition-transform" />
+                        Details
+                      </CollapsibleTrigger>
+                      
+                      <CollapsibleContent>
+                        <CardContent class="py-3 px-4 border-t">
+                          <div class="space-y-3">
+                            {#if result.error}
+                              <div>
+                                <p class="text-sm font-medium mb-1">Error:</p>
+                                <pre class="text-xs p-3 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300 rounded-md overflow-x-auto">{result.error}</pre>
+                              </div>
+                            {/if}
+                            
+                            {#if result.output !== undefined}
+                              <div>
+                                <p class="text-sm font-medium mb-1">Your Output:</p>
+                                <pre class="text-xs p-3 bg-muted rounded-md overflow-x-auto">{result.output}</pre>
+                              </div>
+                            {/if}
+                          </div>
+                        </CardContent>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </Card>
+                {/each}
+              </div>
+              
+              {#if testResults.every(test => test.passed)}
+                <div class="mt-4">
+                  <Card class="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
+                    <CardContent class="py-4 flex items-center justify-between">
+                      <div>
+                        <h3 class="font-semibold text-green-700 dark:text-green-400">
+                          Challenge Completed Successfully!
+                        </h3>
+                        <p class="text-sm text-green-600 dark:text-green-500">
+                          All tests passed. Great job!
+                        </p>
+                      </div>
+                      
+                      <Button 
+                        on:click={() => navigateToChallenge('next')} 
+                        disabled={currentChallengeIndex === challengeIds.length - 1}
+                        class="bg-green-600 hover:bg-green-700"
+                      >
+                        Next Challenge
+                        <ArrowRight class="h-4 w-4 ml-2" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              {/if}
+            </div>
+          {:else}
+          <div class="flex flex-col items-center justify-center py-8 text-muted-foreground">
+            <Terminal class="h-8 w-8 mb-3" />
+            <h3 class="text-base font-medium">Run your code to see test results</h3>
+            <p class="text-sm">Press Ctrl+Enter or click the Run Code button above</p>
           </div>
         {/if}
       </div>
-    </main>
-  
-    <footer class="bg-slate-800 text-white/80 py-6 mt-8">
-      <div class="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center">
-        <div class="flex items-center space-x-4 mt-4 md:mt-0">
-            <a href="#" class="text-white/80 hover:text-white transition">Terms</a>
-            <a href="#" class="text-white/80 hover:text-white transition">Privacy</a>
-            <a href="#" class="text-white/80 hover:text-white transition">Help</a>
-          </div>
-        </div>
-      </footer>
     </div>
-    
-    <style>
+  {:else}
+  
+    <div class="flex-1 flex flex-col items-center justify-center">
+      <Loader class="h-10 w-10 animate-spin text-muted-foreground mb-4" />
+      <p class="text-lg font-medium">Loading challenges...</p>
+      <p class="text-sm text-muted-foreground mt-2">Please wait while we load your programming challenges</p>
+    </div>
+  {/if}
+</div>
+</div>
 
-      :global(.CodeMirror) {
-        height: 100% !important;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 14px;
-        line-height: 1.6;
-      }
-      
-      :global(.CodeMirror-gutters) {
-        border-right: 1px solid rgba(0,0,0,0.05);
-        background-color: rgba(0,0,0,0.02);
-      }
-      
-      :global(.CodeMirror-linenumber) {
-        color: rgba(0,0,0,0.4);
-        padding: 0 8px;
-      }
-      
-      :global(.CodeMirror-selected) {
-        background: rgba(66, 153, 225, 0.15) !important;
-      }
-      
-      :global(.CodeMirror-activeline-background) {
-        background: rgba(0,0,0,0.04);
-      }
-      
-      :global(.CodeMirror-matchingbracket) {
-        color: #38a169 !important;
-        border-bottom: 1px solid #38a169;
-        font-weight: bold;
-      }
-      
-      :global(.CodeMirror-scrollbar-filler) {
-        background-color: transparent;
-      }
-      
-      :global(.CodeMirror-hint) {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 13px;
-        padding: 4px 8px;
-        border-radius: 2px;
-      }
-      
-      :global(.CodeMirror-hints) {
-        border-radius: 4px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        padding: 2px 0;
-      }
-      
-      :global(.cm-s-github-dark.CodeMirror), :global(.cm-s-material-palenight.CodeMirror), :global(.cm-s-dracula.CodeMirror) {
-        background-color: #0d1117;
-        color: #e1e4e8;
-      }
-      
-      :global(.CodeMirror-simplescroll-vertical) {
-        width: 12px;
-        border-radius: 6px;
-        margin-right: 4px;
-      }
-      
-      :global(.CodeMirror-simplescroll-horizontal) {
-        height: 12px;
-        border-radius: 6px;
-        margin-bottom: 4px;
-      }
-      
-      /* Smooth transitions */
-      :global(.transition-height) {
-        transition: max-height 0.3s ease-in-out;
-        overflow: hidden;
-      }
-      
-      :global(.prose) {
-        line-height: 1.7;
-      }
-      
-      :global(.prose p) {
-        margin-bottom: 1rem;
-      }
-      
-      :global(.prose ul) {
-        list-style-type: disc;
-        margin-left: 1.25rem;
-        margin-bottom: 1rem;
-      }
-      
-      :global(.prose ol) {
-        list-style-type: decimal;
-        margin-left: 1.25rem;
-        margin-bottom: 1rem;
-      }
-      
-      :global(.prose code) {
-        font-family: 'JetBrains Mono', monospace;
-        background-color: rgba(0,0,0,0.05);
-        padding: 0.1em 0.3em;
-        border-radius: 3px;
-        font-size: 0.9em;
-      }
-      
-      :global(.prose pre) {
-        background-color: #f6f8fa;
-        border-radius: 6px;
-        padding: 1rem;
-        overflow-x: auto;
-        margin: 1rem 0;
-      }
-      
-      :global(.prose pre code) {
-        background-color: transparent;
-        padding: 0;
-        font-size: 0.9em;
-        color: #24292e;
-      }
-    </style>
+<style>
+:global(.monaco-editor .minimap) {
+  display: none !important;
+}
+
+:global(.monaco-editor .margin) {
+  background-color: transparent !important;
+}
+
+:global(.monaco-editor .line-numbers) {
+  color: var(--text-muted) !important;
+}
+
+:global(body) {
+  font-family: 'Inter', sans-serif;
+}
+
+.prose pre {
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  background-color: rgb(var(--muted) / 0.5);
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.875rem;
+}
+
+.prose code {
+  font-family: 'JetBrains Mono', monospace;
+  background-color: rgb(var(--muted) / 0.5);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+}
+</style>

@@ -527,6 +527,11 @@ func runTestsInDocker(code string, challenge Challenge) []TestResult {
 			},
 			Tty: false,
 		}
+		seccompData, err := os.ReadFile("seccomp.json")
+		if err != nil {
+			log.Printf("Error reading seccomp profile: %v", err)
+			// Handle error
+		}
 
 		runHostConfig := &container.HostConfig{
 			Resources: container.Resources{
@@ -534,8 +539,15 @@ func runTestsInDocker(code string, challenge Challenge) []TestResult {
 				MemorySwap: int64(challenge.MemoryLimit) * 1024 * 1024,
 				CPUPeriod:  100000,
 				CPUQuota:   50000,
+				PidsLimit:  func() *int64 { i := int64(20); return &i }(),
 			},
 			Binds: []string{"code-runner-data:/code"},
+			SecurityOpt: []string{
+				"no-new-privileges",
+				"seccomp=" + string(seccompData),
+			},
+			CapDrop:        []string{"ALL"},
+			ReadonlyRootfs: true,
 		}
 
 		runResp, err := dockerClient.ContainerCreate(

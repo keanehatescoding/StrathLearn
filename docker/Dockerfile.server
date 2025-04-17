@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine
+FROM golang:1.24.2-bookworm  
 
 WORKDIR /app
 
@@ -10,9 +10,11 @@ RUN go get github.com/google/uuid
 COPY . .
 
 # Install Docker client
-RUN apk add --no-cache docker-cli
+RUN apt-get update && apt-get install -y docker.io
 
-RUN apk add --no-cache gcc musl-dev
+# Install build dependencies
+RUN apt-get install -y gcc libc6-dev
+
 RUN go build -o app backend/main.go
 
 EXPOSE 8080

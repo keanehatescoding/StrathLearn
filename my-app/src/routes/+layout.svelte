@@ -1,6 +1,15 @@
 <script lang="ts">
 	import '../app.css';
-	let { children } = $props();
+	import Nav from '$lib/components/Nav.svelte';
+	import { ModeWatcher } from "mode-watcher";
+	import { Toaster } from "$lib/components/ui/sonner/index.js";
 </script>
 
-{@render children()}
+<div class="min-h-screen flex flex-col">
+	<ModeWatcher />
+	<Nav />
+	<main class="flex-1 pt-16">
+		<slot />
+	</main>
+	<Toaster />
+</div>

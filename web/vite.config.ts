@@ -5,14 +5,14 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
-	server: {
-		proxy: {
-		  '/api': {
-			target: 'https://strathlearn-3ba26ebd38c9.herokuapp.com',
-			changeOrigin: true
-		  }
-		}
-	  },
+	// server: {
+	// 	proxy: {
+	// 	  '/api': {
+	// 		target: 'https://api.singularity.co.ke/api/challenges',
+	// 		changeOrigin: true
+	// 	  }
+	// 	}
+	//   },
 
 	test: {
 		workspace: [
