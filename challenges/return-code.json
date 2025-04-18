@@ -1,0 +1,26 @@
+{
+  "id": "status code",
+  "title": "return code",
+  "difficulty": "beginner",
+  "description": "In this challenge you will learn about status codes and how to make your program output different status codes. Status codes\\n
+  are special numbers that your program returns when ","hints": [
+    "Use the printf function from the stdio.h library to output text",
+    "Don't forget to include the stdio.h header at the top of your program",
+    "Remember that your main function should return an integer (typically 0 for successful execution)",
+    "In C, strings need to be enclosed in double quotes"
+  ],
+  "testCases": [
+    {
+      "id": "test1",
+      "input": "",
+      "expectedOutput": "Hello, World!\\n",
+      "hidden": false
+    }
+  ],
+  "initialCode": "#include <stdio.h>\\n\\nint main() {\\n    // Write your code here\\n    \\n    return 0;\\n}",
+  "solutions": [
+    "#include <stdio.h>\\n\\nint main() {\\n    printf(\\\"Hello, World!\\\\n\\\");\\n    return 0;\\n}"
+  ],
+  "timeLimit": 1,
+  "memoryLimit": 128
+}
