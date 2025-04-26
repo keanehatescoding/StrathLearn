@@ -1,0 +1,25 @@
+{
+	"id": "Variable 2",
+		"title": "Integer variables..2",
+		"difficulty": "beginner",
+		"description": "Now that you have a basic idea about integer variables we want you to modify your variable. Variables are mutable, these means after assigning them one value you can later reassign them a different value i.e int num = 1 ; ... then leter int num = 2. Now we want you to create a variable called number and assign it a value of 21. Then change his variable to have a value of 200.",
+		"hints": [
+			"https://www.w3schools.com/c/c_variables.php",
+		"https://www.geeksforgeeks.org/return-statement-in-c/",
+		"Don't forget to end each line of code that is inside of the curly brackets with a semicolon ';' "
+		],
+		"testCases": [
+		{
+			"id": "test1",
+			"input": "",
+			"expectedOutput": "",
+			"hidden": false
+		}
+		],
+		"initialCode":"#include <stdio.h>\\n\\nint main() {\\n\\t//Write your code here\\n\\treturn 0;\\n}",
+		"solutions": [
+			"#include <stdio.h>\\n\\nint main() {\\n\\tint number = 21;\\nint number = 200;\\n\\treturn 0;\\n}"
+		],
+		"timeLimit": 1,
+		"memoryLimit": 128
+}
