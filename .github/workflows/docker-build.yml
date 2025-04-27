@@ -54,19 +54,20 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Setup SSH
-      uses: webfactory/ssh-agent@v0.7.0
-      with:
-        ssh-private-key: ${{ secrets.LINODE_SSH_KEY }}
-    
-    - name: Add Linode host to known_hosts
-      run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan -H ${{ secrets.LINODE_HOST }} >> ~/.ssh/known_hosts
-    
     - name: Deploy to Linode
-      run: |
-        ssh ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_HOST }} '
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.LINODE_HOST }}
+        username: ${{ secrets.LINODE_USER }}
+        key: ${{ secrets.LINODE_SSH_KEY }}
+        port: 22
+        timeout: 60s
+        command_timeout: 20m
+        script: |
+          # Create necessary directories
+          mkdir -p /opt/strathlearn/challenges /opt/strathlearn/executor-workdir
+          chmod -R 755 /opt/strathlearn
+          
           # Login to GitHub Container Registry
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           
@@ -81,8 +82,8 @@ jobs:
           # Navigate to project directory
           cd /opt/strathlearn
           
-          # Create/update docker-compose file if needed
-          [ -f docker-compose.yml ] || cat > docker-compose.yml << EOF
+          # Create docker-compose.yml file
+          cat > docker-compose.yml << 'EOT'
           version: "3.8"
           
           services:
@@ -98,14 +99,22 @@ jobs:
                 - /var/run/docker.sock:/var/run/docker.sock
               environment:
                 - PORT=8080
-          EOF
+          EOT
           
-          # Stop and remove existing containers
-          docker-compose down
+          # Check if docker-compose is installed
+          if ! command -v docker-compose &> /dev/null; then
+            apt-get update
+            apt-get install -y docker-compose
+          fi
+          
+          # Stop and remove existing containers if they exist
+          docker-compose down || true
           
           # Start the new containers
           docker-compose up -d
           
+          # Check if containers are running
+          docker ps
+          
           # Clean up unused images
           docker image prune -f
-        '
