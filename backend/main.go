@@ -1,21 +1,22 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/rpc"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/google/uuid"
 )
@@ -59,182 +60,409 @@ type SubmissionResponse struct {
 	TestResults []TestResult `json:"testResults"`
 }
 
-var challenges map[string]Challenge
-var dockerClient *client.Client
-var containerCleanupChannel = make(chan string, 100)
+type ExecutionRequest struct {
+	Code         string
+	Challenge    Challenge
+	SubmissionID string
+}
 
-func main() {
-	log.Println("Starting server...")
-	currentDir, _ := os.Getwd()
-	log.Printf("Current working directory: %s", currentDir)
+type ExecutionResponse struct {
+	Results []TestResult
+	Error   string
+}
 
-	var err error
-	dockerClient, err = client.NewClientWithOpts(client.FromEnv)
+type CodeExecutor struct {
+	dockerClient *client.Client
+	workDir      string
+	mu           sync.Mutex
+	containers   map[string]time.Time
+}
+
+func NewCodeExecutor(workDir string) (*CodeExecutor, error) {
+	dockerClient, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+		client.WithHost("unix:///var/run/docker.sock"),
+	)
 	if err != nil {
-		log.Printf("Warning: Could not connect to Docker: %v", err)
-		log.Println("Falling back to local execution mode")
-	} else {
-		log.Println("Successfully connected to Docker")
-		go containerCleanupWorker()
+		return nil, fmt.Errorf("failed to connect to Docker: %v", err)
 	}
 
-	challengesDir := "./backend/challenges"
-	if _, err := os.Stat(challengesDir); os.IsNotExist(err) {
-		log.Printf("Creating challenges directory at %s", challengesDir)
-		tempDir, err := os.MkdirTemp(".", "challenges")
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create work directory: %v", err)
+	}
+
+	executor := &CodeExecutor{
+		dockerClient: dockerClient,
+		workDir:      workDir,
+		containers:   make(map[string]time.Time),
+	}
+
+	go executor.cleanupContainers()
+
+	return executor, nil
+}
+
+func (e *CodeExecutor) Execute(req *ExecutionRequest, resp *ExecutionResponse) error {
+	ctx := context.Background()
+	submissionID := req.SubmissionID
+	challenge := req.Challenge
+	code := req.Code
+
+	submissionDir := filepath.Join(e.workDir, submissionID)
+	if err := os.MkdirAll(submissionDir, 0755); err != nil {
+		resp.Error = fmt.Sprintf("Failed to create submission directory: %v", err)
+		return nil
+	}
+	defer os.RemoveAll(submissionDir)
+
+	sourcePath := filepath.Join(submissionDir, "solution.c")
+	if err := os.WriteFile(sourcePath, []byte(code), 0644); err != nil {
+		resp.Error = fmt.Sprintf("Failed to write source code: %v", err)
+		return nil
+	}
+
+	seccompPath := filepath.Join(submissionDir, "seccomp.json")
+	if err := os.WriteFile(seccompPath, []byte(seccompProfile), 0644); err != nil {
+		resp.Error = fmt.Sprintf("Failed to write seccomp profile: %v", err)
+		return nil
+	}
+
+	compileResult, err := e.compileCode(ctx, submissionID, submissionDir)
+	if err != nil {
+		resp.Error = fmt.Sprintf("System error during compilation: %v", err)
+		return nil
+	}
+	if compileResult != "" {
+		resp.Results = []TestResult{{
+			TestCaseID: "compile",
+			Passed:     false,
+			Error:      "Compilation error: " + compileResult,
+		}}
+		return nil
+	}
+
+	results := make([]TestResult, 0, len(challenge.TestCases))
+	for _, tc := range challenge.TestCases {
+		result, err := e.runTest(ctx, submissionID, submissionDir, tc, challenge.TimeLimit, challenge.MemoryLimit)
 		if err != nil {
-			log.Fatalf("Failed to create challenges directory: %v", err)
+			log.Printf("Error running test %s: %v", tc.ID, err)
+			results = append(results, TestResult{
+				TestCaseID: tc.ID,
+				Passed:     false,
+				Error:      fmt.Sprintf("System error: %v", err),
+			})
+			continue
 		}
-		challengesDir = tempDir
+		results = append(results, result)
+	}
+
+	resp.Results = results
+	return nil
+}
+
+func (e *CodeExecutor) compileCode(ctx context.Context, submissionID, submissionDir string) (string, error) {
+	containerName := "compile-" + submissionID
+
+	config := &container.Config{
+		Image: "code-challenge-runner",
+		Cmd: []string{
+			"sh", "-c",
+			"cd /code && gcc -Wall -Werror -std=c11 -o solution solution.c",
+		},
+		Tty:          false,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	hostConfig := &container.HostConfig{
+		AutoRemove: false,
+		Mounts: []mount.Mount{
+			{
+				Type:   mount.TypeBind,
+				Source: submissionDir,
+				Target: "/code",
+			},
+		},
+		Resources: container.Resources{
+			Memory:     256 * 1024 * 1024, // 256MB
+			MemorySwap: 256 * 1024 * 1024, // Disable swap
+			CPUPeriod:  100000,
+			CPUQuota:   50000,           // 0.5 CPU
+			PidsLimit:  &[]int64{50}[0], // Limit processes
+		},
+		ReadonlyRootfs: true,
+		NetworkMode:    "none",
+		SecurityOpt: []string{
+			"no-new-privileges",
+		},
+		CapDrop: []string{"ALL"},
+	}
+
+	containerResp, err := e.dockerClient.ContainerCreate(
+		ctx, config, hostConfig, nil, nil, containerName,
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to create compilation container: %v", err)
+	}
+
+	e.trackContainer(containerResp.ID)
+
+	if err := e.dockerClient.ContainerStart(ctx, containerResp.ID, container.StartOptions{}); err != nil {
+		return "", fmt.Errorf("failed to start compilation container: %v", err)
+	}
+
+	statusCh, errCh := e.dockerClient.ContainerWait(ctx, containerResp.ID, container.WaitConditionNotRunning)
+
+	var compileOutput string
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return "", fmt.Errorf("error waiting for compilation container: %v", err)
+		}
+	case status := <-statusCh:
+
+		logReader, err := e.dockerClient.ContainerLogs(ctx, containerResp.ID, container.LogsOptions{
+			ShowStdout: true,
+			ShowStderr: true,
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to get compilation logs: %v", err)
+		}
+		defer logReader.Close()
+
+		logs, err := io.ReadAll(logReader)
+		if err != nil {
+			return "", fmt.Errorf("failed to read compilation logs: %v", err)
+		}
+
+		if status.StatusCode != 0 {
+			compileOutput = string(logs)
+		}
+	case <-time.After(30 * time.Second):
+		// Timeout
+		return "", fmt.Errorf("compilation timed out")
+	}
+
+	return compileOutput, nil
+}
+
+func (e *CodeExecutor) runTest(ctx context.Context, submissionID, submissionDir string, tc TestCase, timeLimit, memoryLimit int) (TestResult, error) {
+	result := TestResult{
+		TestCaseID: tc.ID,
+		Passed:     false,
+	}
+
+	containerName := "run-" + submissionID + "-" + tc.ID
+
+	inputPath := filepath.Join(submissionDir, "input.txt")
+	if err := os.WriteFile(inputPath, []byte(tc.Input), 0644); err != nil {
+		return result, fmt.Errorf("failed to write test input: %v", err)
+	}
+
+	if timeLimit <= 0 {
+		timeLimit = 5
+	}
+
+	if memoryLimit <= 0 {
+		memoryLimit = 128
+	}
+
+	config := &container.Config{
+		Image: "gcc:latest",
+		Cmd: []string{
+			"sh", "-c",
+			"cd /code && ./solution < input.txt",
+		},
+		Tty:          false,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	hostConfig := &container.HostConfig{
+		AutoRemove: false,
+		Mounts: []mount.Mount{
+			{
+				Type:     mount.TypeBind,
+				Source:   submissionDir,
+				Target:   "/code",
+				ReadOnly: false,
+			},
+		},
+		Resources: container.Resources{
+			Memory:     int64(memoryLimit) * 1024 * 1024,
+			MemorySwap: int64(memoryLimit) * 1024 * 1024, // Disable swap
+			CPUPeriod:  100000,
+			CPUQuota:   50000,           // 0.5 CPU
+			PidsLimit:  &[]int64{30}[0], // Limit processes
+		},
+		ReadonlyRootfs: true,
+		NetworkMode:    "none",
+		SecurityOpt: []string{
+			"no-new-privileges",
+			"seccomp=/code/seccomp.json",
+		},
+		CapDrop: []string{"ALL"},
+	}
+
+	containerResp, err := e.dockerClient.ContainerCreate(
+		ctx, config, hostConfig, nil, nil, containerName,
+	)
+	if err != nil {
+		return result, fmt.Errorf("failed to create execution container: %v", err)
+	}
+
+	e.trackContainer(containerResp.ID)
+
+	if err := e.dockerClient.ContainerStart(ctx, containerResp.ID, container.StartOptions{}); err != nil {
+		return result, fmt.Errorf("failed to start execution container: %v", err)
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(timeLimit)*time.Second)
+	defer cancel()
+
+	statusCh, errCh := e.dockerClient.ContainerWait(ctx, containerResp.ID, container.WaitConditionNotRunning)
+
+	var exitCode int64
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return result, fmt.Errorf("error waiting for execution container: %v", err)
+		}
+	case status := <-statusCh:
+		exitCode = status.StatusCode
+	case <-timeoutCtx.Done():
+
+		seconds := 5
+		e.dockerClient.ContainerStop(ctx, containerResp.ID, container.StopOptions{Timeout: &seconds})
+		result.Error = "Time limit exceeded"
+		return result, nil
+	}
+
+	logReader, err := e.dockerClient.ContainerLogs(ctx, containerResp.ID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+	})
+	if err != nil {
+		return result, fmt.Errorf("failed to get execution logs: %v", err)
+	}
+	defer logReader.Close()
+
+	logs, err := io.ReadAll(logReader)
+	if err != nil {
+		return result, fmt.Errorf("failed to read execution logs: %v", err)
+	}
+
+	programOutput := cleanOutput(string(logs))
+	result.Output = programOutput
+
+	if exitCode != 0 {
+		result.Error = fmt.Sprintf("Runtime error: program exited with code %d", exitCode)
+		return result, nil
+	}
+
+	expectedOutput := cleanOutput(tc.ExpectedOutput)
+	result.Passed = programOutput == expectedOutput
+	if !result.Passed {
+		result.Error = fmt.Sprintf("Expected '%s' but got '%s'",
+			formatForDisplay(expectedOutput),
+			formatForDisplay(programOutput))
+	}
+
+	return result, nil
+}
+
+func (e *CodeExecutor) trackContainer(containerID string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.containers[containerID] = time.Now()
+}
+
+func (e *CodeExecutor) cleanupContainers() {
+	ticker := time.NewTicker(5 * time.Minute)
+	for range ticker.C {
+		e.mu.Lock()
+		now := time.Now()
+		for id, created := range e.containers {
+			if now.Sub(created) > 30*time.Minute {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				e.dockerClient.ContainerRemove(ctx, id, container.RemoveOptions{Force: true})
+				cancel()
+				delete(e.containers, id)
+			}
+		}
+		e.mu.Unlock()
+	}
+}
+
+type Server struct {
+	challenges    map[string]Challenge
+	challengesDir string
+	executor      *CodeExecutor
+}
+
+func NewServer(challengesDir string, executor *CodeExecutor) (*Server, error) {
+	if _, err := os.Stat(challengesDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(challengesDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create challenges directory: %v", err)
+		}
 		createSampleChallenge(challengesDir)
 	}
 
-	challenges = loadChallenges(challengesDir)
+	challenges := loadChallenges(challengesDir)
 	log.Printf("Loaded %d challenges", len(challenges))
 
-	for id, challenge := range challenges {
-		log.Printf("Challenge in memory: ID=%s, Title=%s, Source=%s",
-			id, challenge.Title, challenge.FilePath)
-	}
-
-	corsMiddleware := func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-
-	http.HandleFunc("/api/challenges", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(challenges)
-	})
-
-	http.HandleFunc("/api/challenge/", func(w http.ResponseWriter, r *http.Request) {
-		id := r.URL.Path[len("/api/challenge/"):]
-		log.Printf("Request for challenge: %s", id)
-		if challenge, ok := challenges[id]; ok {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(challenge)
-		} else {
-			log.Printf("Challenge not found: %s", id)
-			http.NotFound(w, r)
-		}
-	})
-
-	http.HandleFunc("/api/submit", func(w http.ResponseWriter, r *http.Request) {
-		var req SubmissionRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		challenge, ok := challenges[req.ChallengeID]
-		if !ok {
-			http.NotFound(w, r)
-			return
-		}
-
-		results := runTests(req.Code, challenge)
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(SubmissionResponse{
-			Success:     allTestsPassed(results),
-			Message:     "Submission processed",
-			TestResults: results,
-		})
-	})
-
-	http.HandleFunc("/debug", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Current directory: %s\n\n", currentDir)
-
-		fmt.Fprintf(w, "Contents of challenges directory:\n")
-		files, err := os.ReadDir(challengesDir)
-		if err != nil {
-			fmt.Fprintf(w, "Error reading challenges dir: %v\n", err)
-		} else {
-			for _, file := range files {
-				fmt.Fprintf(w, "- %s\n", file.Name())
-			}
-		}
-
-		fmt.Fprintf(w, "\nLoaded challenges:\n")
-		for id, challenge := range challenges {
-			fmt.Fprintf(w, "- ID: %s, Title: %s, Source: %s\n",
-				id, challenge.Title, challenge.FilePath)
-		}
-
-		fmt.Fprintf(w, "\nDocker connection status: %v\n", dockerClient != nil)
-	})
-
-	fs := http.FileServer(http.Dir("./frontend"))
-	http.Handle("/", fs)
-
-	port := "8080"
-	if p := os.Getenv("PORT"); p != "" {
-		port = p
-	}
-
-	fmt.Printf("Server running on port %s\n", port)
-	log.Fatal(http.ListenAndServe(":"+port, corsMiddleware(http.DefaultServeMux)))
+	return &Server{
+		challenges:    challenges,
+		challengesDir: challengesDir,
+		executor:      executor,
+	}, nil
 }
 
-func containerCleanupWorker() {
-	ctx := context.Background()
-	for containerId := range containerCleanupChannel {
-		time.Sleep(500 * time.Millisecond)
-		err := dockerClient.ContainerRemove(ctx, containerId, types.ContainerRemoveOptions{Force: true})
-		if err != nil && !strings.Contains(err.Error(), "No such container") {
-			log.Printf("Error removing container %s: %v", containerId, err)
-		}
-	}
+func (s *Server) GetChallenges(req *struct{}, resp *map[string]Challenge) error {
+	*resp = s.challenges
+	return nil
 }
 
-func scheduleContainerCleanup(containerId string) {
-	containerCleanupChannel <- containerId
+func (s *Server) GetChallenge(id *string, resp *Challenge) error {
+	challenge, ok := s.challenges[*id]
+	if !ok {
+		return fmt.Errorf("challenge not found: %s", *id)
+	}
+	*resp = challenge
+	return nil
 }
 
-func createSampleChallenge(dir string) {
-	challengeJSON := `{
-        "id": "hello-world",
-        "title": "Hello, World",
-        "difficulty": "beginner",
-        "description": "Welcome to your first C programming challenge! Write a simple C program that prints the message 'Hello, World!' to the console.\n\nThis is the traditional first program for beginners in any programming language, and it will help you verify that your development environment is set up correctly.",
-        "hints": [
-            "Use the printf function from the stdio.h library to output text",
-            "Don't forget to include the stdio.h header at the top of your program",
-            "Remember that your main function should return an integer (typically 0 for successful execution)",
-            "In C, strings need to be enclosed in double quotes"
-        ],
-        "testCases": [
-            {
-                "id": "test1",
-                "input": "",
-                "expectedOutput": "Hello, World!",
-                "hidden": false
-            }
-        ],
-        "initialCode": "#include <stdio.h>\\n\\nint main() {\\n    // Write your code here\\n    \\n    return 0;\\n}",
-        "solutions": [
-            "#include <stdio.h>\\n\\nint main() {\\n    printf(\\\"Hello, World!\\\");\\n    return 0;\\n}"
-        ],
-        "timeLimit": 1,
-        "memoryLimit": 128
-    }`
-
-	filePath := filepath.Join(dir, "hello-world.json")
-	err := os.WriteFile(filePath, []byte(challengeJSON), 0644)
-	if err != nil {
-		log.Fatalf("Failed to write sample challenge: %v", err)
+func (s *Server) SubmitSolution(req *SubmissionRequest, resp *SubmissionResponse) error {
+	challenge, ok := s.challenges[req.ChallengeID]
+	if !ok {
+		return fmt.Errorf("challenge not found: %s", req.ChallengeID)
 	}
-	log.Printf("Created sample challenge at: %s", filePath)
+
+	submissionID := uuid.New().String()
+
+	execReq := ExecutionRequest{
+		Code:         req.Code,
+		Challenge:    challenge,
+		SubmissionID: submissionID,
+	}
+
+	var execResp ExecutionResponse
+	if err := s.executor.Execute(&execReq, &execResp); err != nil {
+		return err
+	}
+
+	if execResp.Error != "" {
+		resp.Success = false
+		resp.Message = execResp.Error
+		return nil
+	}
+
+	resp.TestResults = execResp.Results
+	resp.Success = allTestsPassed(resp.TestResults)
+	resp.Message = "Submission processed"
+
+	return nil
 }
 
 func loadChallenges(dir string) map[string]Challenge {
@@ -286,467 +514,40 @@ func loadChallenges(dir string) map[string]Challenge {
 	return challenges
 }
 
-func runTests(code string, challenge Challenge) []TestResult {
-	log.Printf("Running tests for challenge: %s", challenge.ID)
+func createSampleChallenge(dir string) {
+	challengeJSON := `{
+        "id": "hello-world",
+        "title": "Hello, World",
+        "difficulty": "beginner",
+        "description": "Welcome to your first C programming challenge! Write a simple C program that prints the message 'Hello, World!' to the console.\n\nThis is the traditional first program for beginners in any programming language, and it will help you verify that your development environment is set up correctly.",
+        "hints": [
+            "Use the printf function from the stdio.h library to output text",
+            "Don't forget to include the stdio.h header at the top of your program",
+            "Remember that your main function should return an integer (typically 0 for successful execution)",
+            "In C, strings need to be enclosed in double quotes"
+        ],
+        "testCases": [
+            {
+                "id": "test1",
+                "input": "",
+                "expectedOutput": "Hello, World!",
+                "hidden": false
+            }
+        ],
+        "initialCode": "#include <stdio.h>\\n\\nint main() {\\n    // Write your code here\\n    \\n    return 0;\\n}",
+        "solutions": [
+            "#include <stdio.h>\\n\\nint main() {\\n    printf(\\\"Hello, World!\\\");\\n    return 0;\\n}"
+        ],
+        "timeLimit": 1,
+        "memoryLimit": 128
+    }`
 
-	if dockerClient != nil {
-		return runTestsInDocker(code, challenge)
-	}
-
-	log.Println("Using local execution mode")
-	return runTestsLocally(code, challenge)
-}
-
-func runTestsInDocker(code string, challenge Challenge) []TestResult {
-	results := make([]TestResult, 0, len(challenge.TestCases))
-	submissionID := uuid.New().String()
-
-	codeDir := "/code/" + submissionID
-	sourcePath := filepath.Join(codeDir, "solution.c")
-
-	code = strings.ReplaceAll(code, "\r\n", "\n")
-	code = strings.ReplaceAll(code, "\r", "\n")
-
-	ctx := context.Background()
-
-	setupConfig := &container.Config{
-		Image: "strathlearn-code-runner:latest",
-		Cmd: []string{
-			"sh", "-c",
-			fmt.Sprintf("mkdir -p %s && cat > %s", codeDir, sourcePath),
-		},
-		Tty:          false,
-		OpenStdin:    true,
-		StdinOnce:    true,
-		AttachStdin:  true,
-		AttachStdout: true,
-		AttachStderr: true,
-	}
-
-	hostConfig := &container.HostConfig{
-		Binds: []string{"code-runner-data:/code"},
-	}
-
-	setupResp, err := dockerClient.ContainerCreate(
-		ctx, setupConfig, hostConfig, nil, nil, "setup-"+submissionID)
+	filePath := filepath.Join(dir, "hello-world.json")
+	err := os.WriteFile(filePath, []byte(challengeJSON), 0644)
 	if err != nil {
-		log.Printf("Error creating setup container: %v", err)
-		return []TestResult{{
-			TestCaseID: "setup",
-			Passed:     false,
-			Error:      "System error: could not create setup container",
-		}}
+		log.Fatalf("Failed to write sample challenge: %v", err)
 	}
-
-	attachResp, err := dockerClient.ContainerAttach(
-		ctx, setupResp.ID, types.ContainerAttachOptions{
-			Stdin:  true,
-			Stdout: true,
-			Stderr: true,
-			Stream: true,
-		})
-	if err != nil {
-		log.Printf("Error attaching to setup container: %v", err)
-		scheduleContainerCleanup(setupResp.ID)
-		return []TestResult{{
-			TestCaseID: "setup",
-			Passed:     false,
-			Error:      "System error: could not attach to setup container",
-		}}
-	}
-	defer attachResp.Close()
-
-	if err := dockerClient.ContainerStart(
-		ctx, setupResp.ID, types.ContainerStartOptions{}); err != nil {
-		log.Printf("Error starting setup container: %v", err)
-		scheduleContainerCleanup(setupResp.ID)
-		return []TestResult{{
-			TestCaseID: "setup",
-			Passed:     false,
-			Error:      "System error: could not start setup container",
-		}}
-	}
-
-	go func() {
-		io.Copy(attachResp.Conn, strings.NewReader(code))
-		attachResp.CloseWrite()
-	}()
-
-	statusCh, errCh := dockerClient.ContainerWait(
-		ctx, setupResp.ID, container.WaitConditionNotRunning)
-	select {
-	case err := <-errCh:
-		if err != nil {
-			log.Printf("Error waiting for setup container: %v", err)
-			scheduleContainerCleanup(setupResp.ID)
-			return []TestResult{{
-				TestCaseID: "setup",
-				Passed:     false,
-				Error:      "System error: setup container error",
-			}}
-		}
-	case <-statusCh:
-	}
-
-	logs, err := dockerClient.ContainerLogs(
-		ctx, setupResp.ID, types.ContainerLogsOptions{
-			ShowStdout: true,
-			ShowStderr: true,
-		})
-	if err == nil {
-		defer logs.Close()
-		var logBuf bytes.Buffer
-		io.Copy(&logBuf, logs)
-		log.Printf("Setup container logs: %s", logBuf.String())
-	}
-
-	scheduleContainerCleanup(setupResp.ID)
-
-	compileConfig := &container.Config{
-		Image: "strathlearn-code-runner:latest",
-		Cmd: []string{
-			"sh", "-c",
-			fmt.Sprintf("cd %s && gcc -Wall -o solution solution.c", codeDir),
-		},
-		Tty: false,
-	}
-
-	compileResp, err := dockerClient.ContainerCreate(
-		ctx, compileConfig, hostConfig, nil, nil, "compile-"+submissionID)
-	if err != nil {
-		log.Printf("Error creating compile container: %v", err)
-		return []TestResult{{
-			TestCaseID: "compile",
-			Passed:     false,
-			Error:      "System error: could not create compile container",
-		}}
-	}
-
-	if err := dockerClient.ContainerStart(
-		ctx, compileResp.ID, types.ContainerStartOptions{}); err != nil {
-		log.Printf("Error starting compile container: %v", err)
-		scheduleContainerCleanup(compileResp.ID)
-		return []TestResult{{
-			TestCaseID: "compile",
-			Passed:     false,
-			Error:      "System error: could not start compile container",
-		}}
-	}
-
-	statusCh, errCh = dockerClient.ContainerWait(
-		ctx, compileResp.ID, container.WaitConditionNotRunning)
-	var compileExitCode int64
-	select {
-	case err := <-errCh:
-		if err != nil {
-			log.Printf("Error waiting for compile container: %v", err)
-			scheduleContainerCleanup(compileResp.ID)
-			return []TestResult{{
-				TestCaseID: "compile",
-				Passed:     false,
-				Error:      "System error: compile container error",
-			}}
-		}
-	case status := <-statusCh:
-		compileExitCode = status.StatusCode
-	}
-
-	compileOutput, err := dockerClient.ContainerLogs(
-		ctx, compileResp.ID, types.ContainerLogsOptions{
-			ShowStdout: true,
-			ShowStderr: true,
-		})
-
-	var compileErrorMsg string
-	if err == nil {
-		defer compileOutput.Close()
-		var outputBuf bytes.Buffer
-		_, err = stdCopy(&outputBuf, &outputBuf, compileOutput)
-		if err != nil {
-			log.Printf("Error reading compile logs: %v", err)
-		} else if compileExitCode != 0 {
-			compileErrorMsg = outputBuf.String()
-			scheduleContainerCleanup(compileResp.ID)
-			return []TestResult{{
-				TestCaseID: "compile",
-				Passed:     false,
-				Error:      "Compilation error: " + compileErrorMsg,
-			}}
-		}
-	}
-
-	scheduleContainerCleanup(compileResp.ID)
-
-	for _, tc := range challenge.TestCases {
-		result := TestResult{
-			TestCaseID: tc.ID,
-			Passed:     false,
-		}
-
-		inputPath := filepath.Join(codeDir, "input.txt")
-		inputConfig := &container.Config{
-			Image: "strathlearn-code-runner:latest",
-			Cmd: []string{
-				"sh", "-c",
-				fmt.Sprintf("echo -n %s > %s",
-					shellescape(tc.Input),
-					inputPath),
-			},
-			Tty: false,
-		}
-
-		inputResp, err := dockerClient.ContainerCreate(
-			ctx, inputConfig, hostConfig, nil, nil, "input-"+submissionID+"-"+tc.ID)
-		if err != nil {
-			log.Printf("Error creating input container: %v", err)
-			result.Error = "System error: failed to prepare input"
-			results = append(results, result)
-			continue
-		}
-
-		if err := dockerClient.ContainerStart(
-			ctx, inputResp.ID, types.ContainerStartOptions{}); err != nil {
-			log.Printf("Error starting input container: %v", err)
-			scheduleContainerCleanup(inputResp.ID)
-			result.Error = "System error: failed to prepare input"
-			results = append(results, result)
-			continue
-		}
-
-		dockerClient.ContainerWait(
-			ctx, inputResp.ID, container.WaitConditionNotRunning)
-		scheduleContainerCleanup(inputResp.ID)
-
-		runConfig := &container.Config{
-			Image: "strathlearn-code-runner:latest",
-			Cmd: []string{
-				"sh", "-c",
-				fmt.Sprintf("cd %s && timeout %d ./solution < input.txt",
-					codeDir,
-					challenge.TimeLimit),
-			},
-			Tty: false,
-		}
-		seccompData, err := os.ReadFile("seccomp.json")
-		if err != nil {
-			log.Printf("Error reading seccomp profile: %v", err)
-			// Handle error
-		}
-
-		runHostConfig := &container.HostConfig{
-			Resources: container.Resources{
-				Memory:     int64(challenge.MemoryLimit) * 1024 * 1024,
-				MemorySwap: int64(challenge.MemoryLimit) * 1024 * 1024,
-				CPUPeriod:  100000,
-				CPUQuota:   50000,
-				PidsLimit:  func() *int64 { i := int64(20); return &i }(),
-			},
-			Binds: []string{"code-runner-data:/code"},
-			SecurityOpt: []string{
-				"no-new-privileges",
-				"seccomp=" + string(seccompData),
-			},
-			CapDrop:        []string{"ALL"},
-			ReadonlyRootfs: true,
-		}
-
-		runResp, err := dockerClient.ContainerCreate(
-			ctx, runConfig, runHostConfig, nil, nil, "run-"+submissionID+"-"+tc.ID)
-		if err != nil {
-			log.Printf("Error creating run container: %v", err)
-			result.Error = "System error: could not create run container"
-			results = append(results, result)
-			continue
-		}
-
-		if err := dockerClient.ContainerStart(
-			ctx, runResp.ID, types.ContainerStartOptions{}); err != nil {
-			log.Printf("Error starting run container: %v", err)
-			scheduleContainerCleanup(runResp.ID)
-			result.Error = "System error: could not start run container"
-			results = append(results, result)
-			continue
-		}
-
-		timeoutCtx, cancel := context.WithTimeout(
-			ctx, time.Duration(challenge.TimeLimit+1)*time.Second)
-		defer cancel()
-
-		var runExitCode int64
-		select {
-		case <-timeoutCtx.Done():
-			dockerClient.ContainerStop(ctx, runResp.ID, container.StopOptions{})
-			result.Error = "Time limit exceeded"
-		case err := <-func() <-chan error {
-			ch := make(chan error, 1)
-			go func() {
-				statusCh, errCh := dockerClient.ContainerWait(
-					ctx, runResp.ID, container.WaitConditionNotRunning)
-				select {
-				case err := <-errCh:
-					ch <- err
-				case status := <-statusCh:
-					runExitCode = status.StatusCode
-					ch <- nil
-				}
-			}()
-			return ch
-		}():
-			if err != nil {
-				log.Printf("Error waiting for run container: %v", err)
-				result.Error = "System error: error waiting for program execution"
-			} else if runExitCode == 124 {
-				result.Error = "Time limit exceeded"
-			} else if runExitCode != 0 {
-				result.Error = fmt.Sprintf("Runtime error: program exited with code %d", runExitCode)
-			}
-		}
-
-		output, err := dockerClient.ContainerLogs(
-			ctx, runResp.ID, types.ContainerLogsOptions{
-				ShowStdout: true,
-				ShowStderr: true,
-			})
-		if err == nil {
-			defer output.Close()
-			var outputBuf bytes.Buffer
-			_, err = stdCopy(&outputBuf, &outputBuf, output)
-			if err != nil {
-				log.Printf("Error reading output: %v", err)
-				result.Error = "System error: failed to read program output"
-			} else {
-				programOutput := cleanOutput(outputBuf.String())
-				result.Output = programOutput
-
-				if result.Error == "" {
-					expectedOutput := cleanOutput(tc.ExpectedOutput)
-
-					log.Printf("Expected output: '%s'", expectedOutput)
-					log.Printf("Actual output: '%s'", programOutput)
-
-					result.Passed = programOutput == expectedOutput
-					if !result.Passed {
-						result.Error = fmt.Sprintf("Expected '%s' but got '%s'",
-							formatForDisplay(expectedOutput),
-							formatForDisplay(programOutput))
-					}
-				}
-			}
-		} else {
-			log.Printf("Error getting run logs: %v", err)
-			result.Error = "System error: failed to get program output"
-		}
-
-		scheduleContainerCleanup(runResp.ID)
-		results = append(results, result)
-	}
-
-	return results
-}
-
-func runTestsLocally(code string, challenge Challenge) []TestResult {
-	results := make([]TestResult, 0, len(challenge.TestCases))
-
-	tempDir, err := os.MkdirTemp("", "challenge-")
-	if err != nil {
-		log.Printf("Failed to create temp dir: %v", err)
-		return []TestResult{{
-			TestCaseID: "compile",
-			Passed:     false,
-			Error:      "System error: could not create temporary directory",
-		}}
-	}
-	defer os.RemoveAll(tempDir)
-
-	submissionID := uuid.New().String()
-
-	sourcePath := filepath.Join(tempDir, fmt.Sprintf("solution-%s.c", submissionID))
-	if err := os.WriteFile(sourcePath, []byte(code), 0644); err != nil {
-		return []TestResult{{
-			TestCaseID: "compile",
-			Passed:     false,
-			Error:      "System error: could not write source code",
-		}}
-	}
-
-	execPath := filepath.Join(tempDir, fmt.Sprintf("solution-%s", submissionID))
-	cmd := exec.Command("gcc", sourcePath, "-o", execPath)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return []TestResult{{
-			TestCaseID: "compile",
-			Passed:     false,
-			Error:      "Compilation error: " + string(output),
-		}}
-	}
-
-	for _, tc := range challenge.TestCases {
-		result := TestResult{
-			TestCaseID: tc.ID,
-			Passed:     false,
-		}
-
-		cmd := exec.Command(execPath)
-		cmd.Stdin = strings.NewReader(tc.Input)
-
-		timeout := time.Duration(challenge.TimeLimit) * time.Second
-		if timeout == 0 {
-			timeout = 5 * time.Second
-		}
-
-		outputChan := make(chan []byte, 1)
-		errorChan := make(chan error, 1)
-
-		go func() {
-			output, err := cmd.CombinedOutput()
-			outputChan <- output
-			errorChan <- err
-		}()
-
-		select {
-		case output := <-outputChan:
-			err := <-errorChan
-			if err != nil {
-				result.Error = "Runtime error: " + err.Error()
-			} else {
-				programOutput := cleanOutput(string(output))
-				result.Output = programOutput
-
-				expectedOutput := cleanOutput(tc.ExpectedOutput)
-
-				result.Passed = programOutput == expectedOutput
-				if !result.Passed {
-					result.Error = fmt.Sprintf("Expected '%s' but got '%s'",
-						formatForDisplay(expectedOutput),
-						formatForDisplay(programOutput))
-				}
-			}
-		case <-time.After(timeout):
-			if cmd.Process != nil {
-				cmd.Process.Kill()
-			}
-			result.Error = "Time limit exceeded"
-		}
-
-		results = append(results, result)
-	}
-
-	return results
-}
-
-func allTestsPassed(results []TestResult) bool {
-	for _, result := range results {
-		if !result.Passed {
-			return false
-		}
-	}
-	return len(results) > 0
-}
-
-func shellescape(s string) string {
-	if s == "" {
-		return "''"
-	}
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+	log.Printf("Created sample challenge at: %s", filePath)
 }
 
 func cleanOutput(output string) string {
@@ -771,32 +572,186 @@ func formatForDisplay(s string) string {
 	return strings.ReplaceAll(s, "\n", "\\n")
 }
 
-func stdCopy(stdout, stderr io.Writer, src io.Reader) (written int64, err error) {
-	var buf [8]byte
-	var totalN int64
-
-	for {
-		_, err = io.ReadFull(src, buf[:])
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			return totalN, err
-		}
-
-		frameSize := int64(buf[4])<<24 | int64(buf[5])<<16 | int64(buf[6])<<8 | int64(buf[7])
-
-		var dst io.Writer
-		if buf[0] == 1 {
-			dst = stdout
-		} else {
-			dst = stderr
-		}
-
-		n, err := io.CopyN(dst, src, frameSize)
-		totalN += n
-		if err != nil {
-			return totalN, err
+func allTestsPassed(results []TestResult) bool {
+	for _, result := range results {
+		if !result.Passed {
+			return false
 		}
 	}
+	return len(results) > 0
+}
+
+// HTTP handler for the RPC server
+type RPCHttpHandler struct {
+	rpcServer *rpc.Server
+}
+
+func (h *RPCHttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "CONNECT" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		io.WriteString(w, "405 must CONNECT\n")
+		return
+	}
+
+	conn, _, err := w.(http.Hijacker).Hijack()
+	if err != nil {
+		log.Print("rpc hijacking error: ", err)
+		return
+	}
+
+	io.WriteString(conn, "HTTP/1.0 200 Connected to RPC\r\n\r\n")
+	h.rpcServer.ServeConn(conn)
+}
+
+func apiHandler(server *Server) http.Handler {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/api/challenges", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(server.challenges)
+	})
+
+	mux.HandleFunc("/api/challenge/", func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Path[len("/api/challenge/"):]
+		if challenge, ok := server.challenges[id]; ok {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(challenge)
+		} else {
+			http.NotFound(w, r)
+		}
+	})
+
+	mux.HandleFunc("/api/submit", func(w http.ResponseWriter, r *http.Request) {
+		var req SubmissionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		var resp SubmissionResponse
+		if err := server.SubmitSolution(&req, &resp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	return mux
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+var seccompProfile = `{
+	"defaultAction": "SCMP_ACT_ERRNO",
+	"architectures": [
+		"SCMP_ARCH_X86_64",
+		"SCMP_ARCH_X86",
+		"SCMP_ARCH_AARCH64"
+	],
+	"syscalls": [
+		{
+			"names": [
+				"access",
+				"arch_prctl",
+				"brk",
+				"close",
+				"execve",
+				"exit_group",
+				"fstat",
+				"futex",
+				"getcwd",
+				"getegid",
+				"geteuid",
+				"getgid",
+				"getpid",
+				"getppid",
+				"getuid",
+				"lseek",
+				"mmap",
+				"mprotect",
+				"munmap",
+				"openat",
+				"pread64",
+				"read",
+				"readlink",
+				"rt_sigaction",
+				"rt_sigprocmask",
+				"set_robust_list",
+				"set_tid_address",
+				"stat",
+				"statfs",
+				"write"
+			],
+			"action": "SCMP_ACT_ALLOW"
+		}
+	]
+}`
+
+func main() {
+	log.Println("Starting C code execution server...")
+
+	workDir := "./executor-workdir"
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		log.Fatalf("Failed to create work directory: %v", err)
+	}
+
+	executor, err := NewCodeExecutor(workDir)
+	if err != nil {
+		log.Fatalf("Failed to create code executor: %v", err)
+	}
+
+	challengesDir := "./challenges"
+	server, err := NewServer(challengesDir, executor)
+	if err != nil {
+		log.Fatalf("Failed to create server: %v", err)
+	}
+
+	rpcServer := rpc.NewServer()
+	if err := rpcServer.Register(server.executor); err != nil {
+		log.Fatalf("Failed to register RPC executor: %v", err)
+	}
+	if err := rpcServer.Register(server); err != nil {
+		log.Fatalf("Failed to register RPC server: %v", err)
+	}
+
+	rpcHandler := &RPCHttpHandler{rpcServer: rpcServer}
+
+	apiMux := apiHandler(server)
+
+	// Create main HTTP server
+	httpMux := http.NewServeMux()
+	httpMux.Handle("/rpc", rpcHandler)
+	httpMux.Handle("/api/", corsMiddleware(apiMux))
+	httpMux.Handle("/", http.FileServer(http.Dir("./frontend")))
+
+	listener, err := net.Listen("tcp", ":9000")
+	if err != nil {
+		log.Fatalf("Failed to start RPC listener: %v", err)
+	}
+	go rpcServer.Accept(listener)
+	log.Println("RPC server started on port 9000")
+
+	port := "8080"
+	if p := os.Getenv("PORT"); p != "" {
+		port = p
+	}
+
+	log.Printf("HTTP server starting on port %s", port)
+	log.Fatal(http.ListenAndServe(":"+port, httpMux))
 }

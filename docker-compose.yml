@@ -1,31 +1,23 @@
-version: '3'
-
 services:
-  app:
+  server:
     build:
       context: .
       dockerfile: docker/Dockerfile.server
     ports:
       - "8080:8080"
+      - "9000:9000"
     volumes:
       - ./challenges:/app/challenges
+      - executor-workdir:/app/executor-workdir
       - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - PORT=8080
 
-  code-runner:
+  runner:
     build:
       context: .
       dockerfile: docker/Dockerfile.runner
-    volumes:
-      - code-runner-data:/code
-    restart: "no"
-
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 256M
+    image: code-challenge-runner
+    profiles:
+      - donotstart
 
 volumes:
-  code-runner-data:
+  executor-workdir:

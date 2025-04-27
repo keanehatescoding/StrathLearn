@@ -1,10 +1,22 @@
 FROM gcc:latest
 
+# Install minimal requirements
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for added security
+RUN groupadd -r coderunner && useradd -r -g coderunner coderunner
+
+# Create working directory for code execution
+RUN mkdir -p /code && \
+    chown -R coderunner:coderunner /code
+
+# Set as non-privileged user
+USER coderunner
+
 WORKDIR /code
 
-# Install necessary tools
-RUN apt-get update && \
-    apt-get install -y time && \
-    mkdir -p /code
-
-VOLUME ["/code"]
+# The runner container doesn't have a CMD as it's used as a base image
+# for ephemeral containers created by the server
