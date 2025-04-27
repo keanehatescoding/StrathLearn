@@ -54,21 +54,17 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Setup SSH
-      uses: webfactory/ssh-agent@v0.7.0
-      with:
-        ssh-private-key: ${{ secrets.LINODE_SSH_KEY }}
-    
-    - name: Add Linode host to known_hosts
-      run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan -H ${{ secrets.LINODE_HOST }} >> ~/.ssh/known_hosts
-    
     - name: Deploy to Linode
-      run: |
-        ssh ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_HOST }} '
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.LINODE_HOST }}
+        username: ${{ secrets.LINODE_USER }}
+        key: ${{ secrets.LINODE_SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        script_stop: true
+        script: |
           # Create necessary directories
-          mkdir -p /opt/strathlearn/challenges /opt/strathlearn/executor-workdir /opt/strathlearn/frontend
+          mkdir -p /opt/strathlearn/challenges /opt/strathlearn/executor-workdir
           chmod -R 755 /opt/strathlearn
           
           # Login to GitHub Container Registry
@@ -86,7 +82,7 @@ jobs:
           cd /opt/strathlearn
           
           # Create docker-compose.yml file
-          cat > docker-compose.yml << EOF
+          cat > docker-compose.yml << 'EOT'
           version: "3.8"
           
           services:
@@ -102,7 +98,7 @@ jobs:
                 - /var/run/docker.sock:/var/run/docker.sock
               environment:
                 - PORT=8080
-          EOF
+          EOT
           
           # Stop and remove existing containers
           docker-compose down || true
@@ -113,9 +109,5 @@ jobs:
           # Check if containers are running
           docker ps
           
-          # Check the server logs
-          docker-compose logs server || true
-          
           # Clean up unused images
           docker image prune -f
-        '
