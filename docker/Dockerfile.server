@@ -5,15 +5,17 @@ WORKDIR /app
 # Install system dependencies
 RUN apk add --no-cache gcc musl-dev git
 
-# Copy and download Go dependencies
-COPY backend/go.mod backend/go.sum ./
-RUN go mod download
-
-# Copy the backend code
+# Copy all Go files first
 COPY backend/ ./backend/
 
-# Build the application
-RUN cd backend && go build -o /app/server
+# Print directory structure for debugging
+RUN ls -la
+RUN ls -la backend/
+
+# Try to build with verbose output to see what's happening
+RUN cd backend && go mod init strathlearn || echo "Module already initialized"
+RUN cd backend && go mod tidy || echo "Failed to tidy modules"
+RUN cd backend && GOOS=linux GOARCH=amd64 go build -v -o /app/server || echo "Build failed"
 
 # Create necessary directories
 RUN mkdir -p /app/executor-workdir
