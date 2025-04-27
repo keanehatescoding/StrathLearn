@@ -8,16 +8,16 @@
   ],
   "testCases": [
     {
-    "id": "test2",
-    "input": "",
-    "expectedOutput": "",
-    "hidden": false
+      "id": "test2",
+      "input": "#include <stdio.h>\\nint main (){\\nprintf(\"Hello World\");\\nreturn 0\\n}",
+      "expectedOutput": "",
+      "hidden": false
     }
   ],
-    "initialCode": "#include <stdio.h>\\nint main (){\\n// Comment out this code\\nprintf('Hello coder!\\n');\\nreturn 0;}",
-    "solutions": [
+  "initialCode": "#include <stdio.h>\\nint main (){\\n// Comment out this code\\nprintf('Hello coder!\\n');\\nreturn 0;}",
+  "solutions": [
     "#include <stdio.h>\\nint main(){\\n//printf('Hello World!\\n');\\nreturn 0;\\n}";
   ],
-    "timelimit": 1,
-    "memoryLimit": 128
+  "timelimit": 1,
+  "memoryLimit": 128
 }

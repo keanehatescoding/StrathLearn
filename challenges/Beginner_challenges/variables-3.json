@@ -1,0 +1,25 @@
+{
+	"id": "Variable 3",
+		"title": "Integer variables..3",
+		"difficulty": "beginner",
+		"description": "Now that you understand how to mutate(change) the value of your variable you are going to learn about variable declaration. When you type int x = 21, you have declared a variable called x i.e int x; and assigned this variable a value of 21. You can declare variables and later assign them values in C i.e int a; int b;. You can even declared them together in one statement i.e int x, y, z; . Or if your an efficient programmer you can declare and assign them values all in one line i.e int a = 21, b = 69, c = 53. Now your challenge is declare 5 variables a,b .. e and assign them values 1 - 5 all in one line.",
+		"hints": [
+			"https://www.w3schools.com/c/c_variables.php",
+		"https://www.geeksforgeeks.org/return-statement-in-c/",
+		"Don't forget to end each line of code that is inside of the curly brackets with a semicolon ';' "
+		],
+		"testCases": [
+		{
+			"id": "test1",
+			"input": "",
+			"expectedOutput": "",
+			"hidden": false
+		}
+		],
+		"initialCode":"#include <stdio.h>\\n\\nint main() {\\n\\t//Write your code here\\n\\treturn 0;\\n}",
+		"solutions": [
+			"#include <stdio.h>\\n\\nint main() {\\n\\tint a = 1 , b = 2 , c = 3 , d  = 4 , e = 5;\\n\\treturn 0;\\n}"
+		],
+		"timeLimit": 1,
+		"memoryLimit": 128
+}

@@ -1,0 +1,23 @@
+{
+  "id": "While loops",
+  "title": "Conditonals..3",
+  "difficulty": "Easy",
+  "description": "Another  useful loop is the while loop.\\n This looping structure can be quite useful if you don't know how many times you want a condition to execute until a condition is met.\\n This is because it is always true i.e a forever loop until your condition is met and it becomes false",
+  "hints": [
+    "## to do"
+  ],
+  "testCases": [
+    {
+      "id": "test1",
+      "input": "5",
+      "expectedOutput": "",
+      "hidden": false
+    }
+  ],
+  "initialCode": "#include <stdio.h>\\nint main(){\\n//Create a while loop to calculate the factorial of a number\\n return 0}",
+  "solutions": [
+    "#include <stdio.h>\\nint main(){\\nint num;\\nscanf('%d', &num);\\nwhile(num>=0){\\nans*=num;\\nnum---;}printf("%d",num);\\return 0\\n}"
+  ],
+  "timelimit": "10",
+  "memoryLimit": "500"
+}

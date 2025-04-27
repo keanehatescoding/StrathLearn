@@ -1,0 +1,25 @@
+{
+	"id": "Variable 1",
+		"title": "Integer variables",
+		"difficulty": "beginner",
+		"description": "When writing your own programs you will need to store some data. To accomplish this you will use things known as variables. A variable in C programming is the same as a variable from your Maths lessons i.e x = 21; the major difference is here variables have types. Consider we want to store a number i.e 21. To store a number in C we write the following int num = 21. This tells the C compiler we want to create a integer variable called num1 and assign the value 21 into it. Now your challenge is to store the number 3 in a variable called num and return it",
+			"hints": [
+			"https://www.w3schools.com/c/c_variables.php",
+			"https://www.geeksforgeeks.org/return-statement-in-c/",
+			"Don't forget to end each statement within your code in the curly brackets with a semicolon ';' "
+			],
+			"testCases": [
+			{
+				"id": "test1",
+				"input": "",
+				"expectedOutput": "",
+				"hidden": false
+			}
+			],
+			"initialCode":"#include <stdio.h>\\n\\nint main() {\\n\\t//Write your code here\\n\\treturn 0;\\n}",
+			"solutions": [
+				"#include <stdio.h>\\n\\nint main() {\\n\\tint num = 3;\\n\\treturn int;\\n}"
+			],
+			"timeLimit": 1,
+			"memoryLimit": 128
+}

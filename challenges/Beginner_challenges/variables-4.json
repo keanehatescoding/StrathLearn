@@ -1,0 +1,26 @@
+{
+	"id": "Variable 3",
+		"title": "Float variables..3",
+		"difficulty": "beginner",
+		"description": "Float variables are essentially the same as integer varables except they can store number with fraction parts i.e float pi = 3.14159. You can try and store floats inside of integers but just know they will be truncated i.e int num = 3.9999 return 3. There also exists doubles which have twice the accuracy of floats i.e floats take 32 bits of memory so the accuracy is 2^32 while doubles have an accuracy of 64 bits hence the accuracy of 2^64. This is technically wrong because doubles have and floats can be negative meaning they can range from -2^32 / 2 to +2^32 / 2. Your challenge is to create two variables i.e pi which is a float and should be accurate up to the 20'th decimal point while another double e (aka euler's identity) which should be accurate up to the 42'nd decimal point."
+			"hints": [
+			"https://www.w3schools.com/c/c_variables.php",
+		"https://www.prepbytes.com/blog/c-programming/float-in-c/",
+		"https://www.geeksforgeeks.org/return-statement-in-c/",
+		"Don't forget to end each line of code that is inside of the curly brackets with a semicolon ';' "
+			],
+			"testCases": [
+			{
+				"id": "test1",
+				"input": "",
+				"expectedOutput": "",
+				"hidden": false
+			}
+			],
+			"initialCode": "#include <stdio.h>\\n\\nint main() {\\n\\t//Write your code here\\n\\treturn 0;\\n}",
+			"solutions": [
+				"#include <stdio.h>\\n\\nint main() {\\n\\tfloat pi = 3.14159265358979323846;\\n\\tdouble e = \\n\\treturn 0;\\n}"
+			],
+			"timeLimit": 1,
+			"memoryLimit": 128
+}

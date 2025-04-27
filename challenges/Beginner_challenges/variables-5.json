@@ -1,0 +1,25 @@
+{
+  "id": "Variable 5",
+  "title": "Char variables",
+  "difficulty": "beginner",
+  "description": "In C you can write sentences using strings. Strings are a concatenation(joining) of multiple characters where characters are numbers like 'a' , 'b' and 'c'. Pay great detail to the single quotes I have used. C is a strict typed language which does not allow you to use double quotes i.e \" \" to assign character variables. Example char letter0 = 'A' compiles but char letter26 = \"Z\" fails to compile. Now for your challenge create a 5 five variables character1,2 ... character5 and then assign them the letters 'a','b' ... 'e' ",
+  "hints": [
+    "https://www.w3schools.com/c/c_data_types_characters.php",
+    "https://www.geeksforgeeks.org/return-statement-in-c/",
+    "Don't forget to end each line of code that is inside of the curly brackets with a semicolon ';' "
+  ],
+  "testCases": [
+    {
+      "id": "test1",
+      "input": "",
+      "expectedOutput": "",
+      "hidden": false
+    }
+  ],
+  "initialCode": "#include <stdio.h>\\n\\nint main() {\\n\\t//Write your code here\\n\\treturn 0;\\n}",
+  "solutions": [
+    "#include <stdio.h>\\n\\nint main() {\\n\\tchar character0 = 'a' , character2 = 'b' , character3 = 'c' , character4  = 'd' , character5 = 'e';\\n\\treturn 0;\\n}"
+  ],
+  "timeLimit": 1,
+  "memoryLimit": 128
+}
