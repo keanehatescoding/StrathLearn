@@ -1,10 +1,10 @@
-name: Build and Test Docker Images
+name: Build, Test and Deploy Docker Images
 
 on:
   push:
     branches: [ master, main ]
   pull_request:
-    branches: [ master,main ]
+    branches: [ master, main ]
 
 jobs:
   build:
@@ -16,25 +16,98 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
       
+    - name: Login to GitHub Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
     - name: Build runner image
       uses: docker/build-push-action@v4
       with:
         context: .
         file: ./docker/Dockerfile.runner
-        tags: code-challenge-runner:latest
-        push: false
-        load: true
+        tags: |
+          code-challenge-runner:latest
+          ghcr.io/${{ github.repository_owner }}/code-challenge-runner:latest
+        push: ${{ github.event_name != 'pull_request' }}
+        load: ${{ github.event_name == 'pull_request' }}
         
     - name: Build server image
       uses: docker/build-push-action@v4
       with:
         context: .
         file: ./docker/Dockerfile.server
-        tags: strathlearn-server:latest
-        push: false
-        load: true
+        tags: |
+          strathlearn-server:latest
+          ghcr.io/${{ github.repository_owner }}/strathlearn-server:latest
+        push: ${{ github.event_name != 'pull_request' }}
+        load: ${{ github.event_name == 'pull_request' }}
         
     - name: Test containers
       run: |
         docker images
-      
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.LINODE_SSH_KEY }}
+    
+    - name: Add Linode host to known_hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H ${{ secrets.LINODE_HOST }} >> ~/.ssh/known_hosts
+    
+    - name: Deploy to Linode
+      run: |
+        ssh ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_HOST }} '
+          # Login to GitHub Container Registry
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+          # Pull the latest images
+          docker pull ghcr.io/${{ github.repository_owner }}/code-challenge-runner:latest
+          docker pull ghcr.io/${{ github.repository_owner }}/strathlearn-server:latest
+
+          # Tag images with local names for docker-compose
+          docker tag ghcr.io/${{ github.repository_owner }}/code-challenge-runner:latest code-challenge-runner:latest
+          docker tag ghcr.io/${{ github.repository_owner }}/strathlearn-server:latest strathlearn-server:latest
+          
+          # Navigate to project directory
+          cd /opt/strathlearn
+          
+          # Create/update docker-compose file if needed
+          [ -f docker-compose.yml ] || cat > docker-compose.yml << EOF
+          version: "3.8"
+          
+          services:
+            server:
+              image: strathlearn-server:latest
+              restart: always
+              ports:
+                - "80:8080"
+                - "9000:9000"
+              volumes:
+                - ./challenges:/app/challenges
+                - ./executor-workdir:/app/executor-workdir
+                - /var/run/docker.sock:/var/run/docker.sock
+              environment:
+                - PORT=8080
+          EOF
+          
+          # Stop and remove existing containers
+          docker-compose down
+          
+          # Start the new containers
+          docker-compose up -d
+          
+          # Clean up unused images
+          docker image prune -f
+        '
