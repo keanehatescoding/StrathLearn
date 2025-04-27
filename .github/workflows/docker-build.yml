@@ -67,6 +67,10 @@ jobs:
     - name: Deploy to Linode
       run: |
         ssh ${{ secrets.LINODE_USER }}@${{ secrets.LINODE_HOST }} '
+          # Create necessary directories
+          mkdir -p /opt/strathlearn/challenges /opt/strathlearn/executor-workdir /opt/strathlearn/frontend
+          chmod -R 755 /opt/strathlearn
+          
           # Login to GitHub Container Registry
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           
@@ -81,8 +85,8 @@ jobs:
           # Navigate to project directory
           cd /opt/strathlearn
           
-          # Create/update docker-compose file if needed
-          [ -f docker-compose.yml ] || cat > docker-compose.yml << EOF
+          # Create docker-compose.yml file
+          cat > docker-compose.yml << EOF
           version: "3.8"
           
           services:
@@ -101,10 +105,16 @@ jobs:
           EOF
           
           # Stop and remove existing containers
-          docker-compose down
+          docker-compose down || true
           
           # Start the new containers
           docker-compose up -d
+          
+          # Check if containers are running
+          docker ps
+          
+          # Check the server logs
+          docker-compose logs server || true
           
           # Clean up unused images
           docker image prune -f
