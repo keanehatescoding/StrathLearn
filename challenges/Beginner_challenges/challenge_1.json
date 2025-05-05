@@ -1,23 +1,23 @@
 {
-	"id": "hello-world",
-		"title": "Hello, World!",
-		"difficulty": "beginner",
-		"description": "Welcome to your first challenge. In this challenge we have already written the code for you, can you find a way to submit it. pst if you are stuck just press the hint but don't always click the hint and try solving the problem first"
-			"hints": [
-			"Press the submit button to submit your code"
-			],
-			"testCases": [
-			{
-				"id": "test1",
-				"input": "",
-				"expectedOutput": "Hello, World!\\n",
-				"hidden": false
-			}
-			],
-			"initialCode":"#include <stdio.h>\\n\\nint main() {\\n    printf(\\\"Hello, World!\\\\n\\\");\\n    return 0;\\n}",
-			"solutions": [
-				"#include <stdio.h>\\n\\nint main() {\\n    printf(\\\"Hello, World!\\\\n\\\");\\n    return 0;\\n}"
-			],
-			"timeLimit": 1,
-			"memoryLimit": 128
+  "id": "hello-world",
+  "title": "Hello, World!",
+  "difficulty": "beginner",
+  "description": "Welcome to your first challenge. In this challenge we have already written the code for you, can you find a way to submit it. pst if you are stuck just press the hint but don't always click the hint and try solving the problem first",
+  "hints": [
+    "Press the submit button to submit your code"
+  ],
+  "testCases": [
+    {
+      "id": "test1",
+      "input": "",
+      "expectedOutput": "Hello, World!\\n",
+      "hidden": false
+    }
+  ],
+  "initialCode": "#include <stdio.h>\\n\\nint main() {\\n    printf(\\\"Hello, World!\\\\n\\\");\\n    return 0;\\n}",
+  "solutions": [
+    "#include <stdio.h>\\n\\nint main() {\\n    printf(\\\"Hello, World!\\\\n\\\");\\n    return 0;\\n}"
+  ],
+  "timeLimit": 1,
+  "memoryLimit": 128
 }

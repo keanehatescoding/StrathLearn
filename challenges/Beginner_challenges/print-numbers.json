@@ -1,0 +1,23 @@
+{
+  "id": "printf-1",
+  "title": "Outputing Strings",
+  "difficulty": "beginner",
+  "description": "What happens when you want to print out the result of an mathematical operation or a print out a string from a string variable. In order to print out the these we use things called format specifiers. An example is this printf(\"My name is %s\",name); If your name is say 'Joe' then this code will compile and run as \"My name is Joe\". Now your challenge is to find out how to put print out integers then print out the first prime number. Save it to a variable called fifth_prime_number. Pst here is a cheatsheet that you can use to find out different format specifiers https://www.geeksforgeeks.org/format-specifiers-in-c/",
+  "jhints": [
+    "https://www.geeksforgeeks.org/format-specifiers-in-c/"
+  ],
+  "testCases": [
+    {
+      "id": "test1",
+      "input": "",
+      "expectedOutput": "2",
+      "hidden": false
+    }
+  ],
+  "initialCode": "#include <stdio.h>\\n\\nint main() {\\n\\tEnter you code here\\nreturn 0;\\n}",
+  "solutions": [
+    "#include <stdio.h>\\n\\nint main() {\\n    printf(\\\"Hello, World!\\\\n\\\");\\n    return 0;\\n}"
+  ],
+  "timeLimit": 1,
+  "memoryLimit": 128
+}

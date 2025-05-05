@@ -1,0 +1,23 @@
+{
+  "id": "printf-1",
+  "title": "Outputing Strings",
+  "difficulty": "beginner",
+  "description": "Now that you have a basic understanding of strings, you will now learn how to output strings. In order to output a string you can use the printf() function. These function takes a string or character and then output's it to the screen. i.e printf(\"My name is is Terry\"); outputs. 'My name is Terry'. Now your challenge is to print the string \"Hello World!\". NB: This is an important string that you will output whenever you learn to wrie any program. ",
+  "hints": [
+    "https://www.geeksforgeeks.org/printf-in-c/"
+  ],
+  "testCases": [
+    {
+      "id": "test1",
+      "input": "",
+      "expectedOutput": "Hello, World!\\n",
+      "hidden": false
+    }
+  ],
+  "initialCode": "#include <stdio.h>\\n\\nint main() {\\n\\tEnter you code here\\nreturn 0;\\n}",
+  "solutions": [
+    "#include <stdio.h>\\n\\nint main() {\\n    printf(\\\"Hello, World!\\\\n\\\");\\n    return 0;\\n}"
+  ],
+  "timeLimit": 1,
+  "memoryLimit": 128
+}
