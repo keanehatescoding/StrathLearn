@@ -23,8 +23,7 @@ jobs:
       - name: Test
         run: go test -v ./...
         
-      - name: Build
-        run: go build -v ./...
+   
 
   build-docker:
     runs-on: ubuntu-latest
