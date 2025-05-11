@@ -55,7 +55,6 @@ func main() {
 
 	corsMiddleware := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 			allowedOrigins := []string{
 				"https://codex.singularity.co.ke",
 				"http://localhost:5173",
@@ -63,6 +62,16 @@ func main() {
 			}
 
 			origin := r.Header.Get("Origin")
+
+			if r.Method == "OPTIONS" {
+
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 
 			allowed := false
 			for _, allowedOrigin := range allowedOrigins {
@@ -75,18 +84,12 @@ func main() {
 			if allowed {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 			} else if origin == "" {
-
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 			}
 
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-
-			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
 
 			next.ServeHTTP(w, r)
 		})
