@@ -5,7 +5,7 @@ services:
     image: strathlearn-app:latest
     restart: unless-stopped
     ports:
-      - "80:8080"
+      - "8080:8080"
     volumes:
       - challenge-data:/app/backend/challenges
     environment:
