@@ -68,8 +68,7 @@ func main() {
 		})
 	}
 
-	http.HandleFunc("/api/challenges", apiHandler.ListChallenges)
-
+	http.Handle("/api/challenges", corsMiddleware(http.HandlerFunc(apiHandler.ListChallenges)))
 	protectedMux := http.NewServeMux()
 	protectedMux.HandleFunc("/api/challenge/", apiHandler.GetChallenge)
 	protectedMux.HandleFunc("/api/submit", apiHandler.SubmitSolution)
