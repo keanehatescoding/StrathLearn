@@ -55,9 +55,33 @@ func main() {
 
 	corsMiddleware := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+			allowedOrigins := []string{
+				"https://codex.singularity.co.ke",
+				"http://localhost:5173",
+				"http://localhost:3000",
+			}
+
+			origin := r.Header.Get("Origin")
+
+			allowed := false
+			for _, allowedOrigin := range allowedOrigins {
+				if origin == allowedOrigin {
+					allowed = true
+					break
+				}
+			}
+
+			if allowed {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			} else if origin == "" {
+
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			}
+
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(http.StatusOK)
@@ -69,18 +93,18 @@ func main() {
 	}
 
 	http.Handle("/api/challenges", corsMiddleware(http.HandlerFunc(apiHandler.ListChallenges)))
+
 	protectedMux := http.NewServeMux()
 	protectedMux.HandleFunc("/api/challenge/", apiHandler.GetChallenge)
 	protectedMux.HandleFunc("/api/submit", apiHandler.SubmitSolution)
 	protectedMux.HandleFunc("/debug", apiHandler.Debug)
 	protectedMux.HandleFunc("/api/test-auth", apiHandler.TestAuth)
 
-	authHandler := corsMiddleware(auth.AuthMiddleware(protectedMux))
-	http.Handle("/api/challenge/", authHandler)
-	http.Handle("/api/submit", authHandler)
-	http.Handle("/debug", authHandler)
-
-	http.Handle("/api/test-auth", authHandler)
+	authHandler := auth.AuthMiddleware(protectedMux)
+	http.Handle("/api/challenge/", corsMiddleware(authHandler))
+	http.Handle("/api/submit", corsMiddleware(authHandler))
+	http.Handle("/debug", corsMiddleware(authHandler))
+	http.Handle("/api/test-auth", corsMiddleware(authHandler))
 
 	fs := http.FileServer(http.Dir("./frontend"))
 	http.Handle("/", fs)

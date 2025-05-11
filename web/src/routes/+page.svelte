@@ -204,9 +204,16 @@
   async function fetchChallenges() {
     isProcessing = true;
     try {
-      const response = await fetch('https://api.singularity.co.ke/api/challenges');
+      const response = await fetch('https://api.singularity.co.ke/api/challenges', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+        // No credentials: 'include' needed
+      });
+      
       if (!response.ok) {
-        throw new Error('Failed to load challenges');
+        throw new Error(`Failed to load challenges: ${response.status} ${response.statusText}`);
       }
       
       challenges = await response.json();
