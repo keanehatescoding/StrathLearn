@@ -1,7 +1,21 @@
+
 FROM gcc:latest
 
-RUN apt-get update && apt-get install -y \
+
+RUN groupadd -r sandboxuser && useradd -r -g sandboxuser -d /code -s /sbin/nologin -c "Sandbox User" sandboxuser
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
     time \
+
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+
 WORKDIR /code
+
+RUN chown -R sandboxuser:sandboxuser /code
+
+
+USER sandboxuser
+
+

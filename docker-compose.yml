@@ -1,18 +1,28 @@
-version: '3.8'
 
 services:
   app:
-    image: strathlearn-app:latest
+    build:
+      context: . 
+      dockerfile: Dockerfile
+    image: strathlearn-app:custom 
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock 
+
+      - /var/run/docker.sock:/var/run/docker.sock
+
       - challenge-data:/app/backend/challenges
+
+      - code-runner-data:/app/code-runner-data 
     environment:
+
       - PORT=8080
+      - REDIS_HOST=redis 
     depends_on:
       - redis
+
+      - code-runner-builder
     networks:
       - strathlearn-network
 
@@ -24,10 +34,18 @@ services:
     networks:
       - strathlearn-network
 
+
+  code-runner-builder:
+    image: strathlearn-code-runner:latest 
+    build:
+      context: . 
+      dockerfile: docker/Dockerfile.runner 
+
+
 volumes:
-  challenge-data:
-  redis-data:
-  code-runner-data:
+  challenge-data: 
+  redis-data:     
+  code-runner-data: 
     external: true
 
 networks:
