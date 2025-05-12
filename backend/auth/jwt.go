@@ -145,7 +145,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			}
 
 			// Get JWKS from cache or fetch from SvelteKit server
-			jwksURL := "http://localhost:3000/api/auth/jwks"
+			jwksURL := "https://codex.singularity.co.ke/api/auth/jwks"
 			jwks, err := jwksCache.GetJWKS(jwksURL)
 			if err != nil {
 				return nil, err

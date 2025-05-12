@@ -187,6 +187,7 @@
       toast.error("Failed to initialize code editor. Please refresh the page.");
     }
   }
+
   
   // Handle keyboard shortcuts
   function handleKeyboardShortcuts(e: KeyboardEvent) {
@@ -245,77 +246,92 @@
     }
   }
   
-  // Load a specific challenge by ID
+
+
   async function loadChallenge(id: string) {
-    try {
-      const toastId = toast.loading('Loading challenge...');
-      
-      const response = await fetch(`https://api.singularity.co.ke/api/challenge/${id}`);
-      if (!response.ok) {
-        throw new Error('Challenge not found');
-      }
-      
-      currentChallenge = await response.json();
-      
-      // Format the code and set it in the editor
-      const formattedCode = currentChallenge?.initialCode.replace(/\\n/g, '\n');
-      code = formattedCode!;
-      
-      if (editor) {
-        // Set language to C
-        monaco.editor.setModelLanguage(editor.getModel(), 'c');
-        editor.setValue(formattedCode);
-      }
-      
-      // Check if we have saved code for this challenge
-      const savedCode = localStorage.getItem(`c_master_challenge_${id}`);
-      if (savedCode) {
-        code = savedCode;
-        if (editor) {
-          editor.setValue(savedCode);
-        }
-      }
-      
-      // Reset state
-      showResults = false;
-      testResults = [];
-      showHints = false;
-      
+  try {
+    const toastId = toast.loading('Loading challenge...');
+    
 
-      updateProgress();
-      
-      toast.dismiss(toastId);
-    } catch (error) {
-      console.error('Error loading challenge:', error);
-      toast.error('Error loading challenge');
-      currentChallenge = null;
+    const tokenResponse = await fetch('https://codex.singularity.coke/api/auth/token');
+    if (!tokenResponse.ok) {
+      throw new Error('Failed to retrieve authentication token');
     }
+    
+    const { token } = await tokenResponse.json();
+    
+    const response = await fetch(`https://api.singularity.co.ke/api/challenge/${id}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Challenge not found');
+    }
+    
+    currentChallenge = await response.json();
+    
+    // Format the code and set it in the editor
+    const formattedCode = currentChallenge?.initialCode.replace(/\\n/g, '\n');
+    code = formattedCode!;
+    
+    if (editor) {
+      // Set language to C
+      monaco.editor.setModelLanguage(editor.getModel(), 'c');
+      editor.setValue(formattedCode);
+    }
+    
+    
+    const savedCode = localStorage.getItem(`c_master_challenge_${id}`);
+    if (savedCode) {
+      code = savedCode;
+      if (editor) {
+        editor.setValue(savedCode);
+      }
+    }
+    
+    
+    showResults = false;
+    testResults = [];
+    showHints = false;
+    
+    updateProgress();
+    
+    toast.dismiss(toastId);
+  } catch (error) {
+    console.error('Error loading challenge:', error);
+    toast.error('Error loading challenge');
+    currentChallenge = null;
   }
-  
+}
 
-  // Around line 250, update the submitCode function
+
 async function submitCode() {
-  console.log('Trying to submit code...'); // Debug log
-  
   if (!currentChallenge) {
-    console.log('No challenge loaded'); // Debug log
     toast.error('No challenge loaded');
     return;
   }
 
-  submitting = true; // Set submitting state
-  console.log('Setting submitting state'); // Debug log
+  submitting = true;
 
   try {
     if (editor) {
       code = editor.getValue();
-      console.log('Got code from editor:', code.substring(0, 100) + '...'); // Debug log
     }
+
+    const tokenResponse = await fetch('https://codex.singularity.co.ke/api/auth/token');
+    if (!tokenResponse.ok) {
+      throw new Error('Failed to retrieve authentication token');
+    }
+    
+    const { token } = await tokenResponse.json();
 
     const response = await fetch('https://api.singularity.co.ke/api/submit', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
         challengeId: currentChallenge.id,
@@ -323,15 +339,11 @@ async function submitCode() {
       })
     });
 
-    console.log('Response status:', response.status); // Debug log
-
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const result = await response.json();
-    console.log('Got result:', result); // Debug log
-
     showResults = true;
     testResults = result.testResults || [];
 
