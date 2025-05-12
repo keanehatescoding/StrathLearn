@@ -253,7 +253,7 @@
     const toastId = toast.loading('Loading challenge...');
     
 
-    const tokenResponse = await fetch('https://codex.singularity.coke/api/auth/token');
+    const tokenResponse = await fetch('https://codex.singularity.co.ke/api/auth/token');
     if (!tokenResponse.ok) {
       throw new Error('Failed to retrieve authentication token');
     }

@@ -23,6 +23,7 @@ export const auth = betterAuth({
     }, 
     trustedOrigins: [
         'http://localhost:3000',
-        'http://localhost:5173'
+        'http://localhost:5173',
+        'https://api.singularity.co.ke',
     ]
 });
