@@ -1,840 +1,634 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { toast } from 'svelte-sonner';
+  import { fade, fly, slide } from 'svelte/transition';
   import { 
-    Code, ChevronRight, ChevronLeft, Terminal, 
-    RotateCcw, Zap, Info, ArrowRight,  
-    Maximize2, Minimize2, Loader, Keyboard,
-    CheckCircle, XCircle, Clock, Award
+    Code, Terminal, Zap, BookOpen, 
+    ChevronRight, CheckCircle, Github, 
+    Sparkles, ArrowRight, Braces, 
+    Laptop, Users, Award, Rocket, 
+    Play, CheckSquare, XSquare, Clock,
+    RefreshCw, Download, Copy, Maximize2
   } from 'lucide-svelte';
   
   // Import UI components
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { Avatar, AvatarFallback } from "$lib/components/ui/avatar";
-  import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "$lib/components/ui/card";
-  import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "$lib/components/ui/select";
+  import { Button } from "$lib/components/ui/button";
+  import { Avatar, AvatarFallback, AvatarImage } from "$lib/components/ui/avatar";
+  import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
-  import { Alert, AlertDescription } from "$lib/components/ui/alert";
-  import { Separator } from "$lib/components/ui/separator";
+  import { Tabs, TabsContent, TabsList, TabsTrigger } from "$lib/components/ui/tabs";
   import { Progress } from "$lib/components/ui/progress";
-  import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "$lib/components/ui/accordion";
-  import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "$lib/components/ui/collapsible";
-  import ModeToggle from "$lib/components/mode-toggle.svelte";
-  import * as Tooltip from "$lib/components/ui/tooltip";
-
-  // Type definitions
-  interface Challenge {
-    id: string;
-    title: string;
-    difficulty: string;
-    description: string;
-    hints: string[];
-    testCases: TestCase[];
-    initialCode: string;
-    solutions?: string[];
-    timeLimit?: number;
-    memoryLimit?: number;
-    category?: string;
-    points?: number;
-  }
-
-  interface TestCase {
-    id: string;
-    input: string;
-    expectedOutput: string;
-    hidden: boolean;
-  }
-
-  interface TestResult {
-    testCaseId: string;
-    passed: boolean;
-    output?: string;
-    error?: string;
-    executionTime?: number;
-  }
-
-
-// Then use it
-
-
-  // State variables
-  let challenges: Record<string, Challenge> = {};
-  let challengeIds: string[] = [];
-  let currentChallenge: Challenge | null = null;
-  let currentChallengeIndex: number = 0;
-  let code: string = '';
-  let editor: any;
-  let testResults: TestResult[] = [];
-  let showResults: boolean = false;
-  let submitting: boolean = false;
-  let editorTheme: string = 'github-dark';
-  let isFullScreen: boolean = false;
-  let progress: number = 0;
-  let editorHeight: string = '100%';
-  let showHints: boolean = false;
   
-  // Editor themes
-  const editorThemes = [
-    { value: 'vs-dark', label: 'VS Dark' },
-    { value: 'github-dark', label: 'GitHub Dark' },
-    { value: 'dracula', label: 'Dracula' },
-    { value: 'nord', label: 'Nord' },
-    { value: 'ayu-dark', label: 'Ayu Dark' },
-    { value: 'tomorrow-night', label: 'Tomorrow Night' }
+  // Import simple-icons
+  import { 
+    siC, siCplusplus, siPython, siJavascript, 
+    siGooglecloudcomposer, siRust, siGo, siRuby, 
+    siReact, siSvelte, siTailwindcss, siTypescript, 
+    siVuedotjs, siNodedotjs, siDjango, siLaravel, 
+    siPostgresql, siGooglecloud, 
+    siFirebase, siDocker, siVercel,
+
+	siPhp,
+
+	siSwift,
+
+	siHtml5,
+
+	siHaskell,
+
+	siKotlin
+
+
+
+
+
+  } from 'simple-icons';
+  
+  // Mock editor state
+  let editorContent = `#include <stdio.h>
+
+int main() {
+  // Welcome to Codex Learning Platform
+  printf("Hello, World!\\n");
+  
+  // Your coding journey starts here
+  int progress = 100;
+  
+  if (progress == 100) {
+    printf("You're ready to begin!\\n");
+  }
+  
+  return 0;
+}`;
+
+  let editorTheme = 'dark';
+  let activeTab = 'c';
+  let isTyping = false;
+  let cursorPosition = 0;
+  let typingInterval: ReturnType<typeof setInterval>;
+  let editorElement: HTMLElement;
+  let lineNumbers: number[] = [];
+  let isRunning = false;
+  let showOutput = false;
+  let outputContent = "";
+  let executionTime = 0;
+  let executionSuccess = true;
+  
+  // Testimonials data
+  const testimonials = [
+    {
+      name: "Alex Johnson",
+      role: "Software Engineer",
+      avatar: "/placeholder.svg?height=40&width=40",
+      content: "Codex has transformed how I approach learning programming languages. The interactive challenges are engaging and practical."
+    },
+    {
+      name: "Sarah Chen",
+      role: "Computer Science Student",
+      avatar: "/placeholder.svg?height=40&width=40",
+      content: "As a student, Codex has been invaluable. The immediate feedback and progression system keeps me motivated."
+    },
+    {
+      name: "Michael Rodriguez",
+      role: "Full Stack Developer",
+      avatar: "/placeholder.svg?height=40&width=40",
+      content: "The best platform I've found for mastering C programming. The editor is intuitive and the challenges are well-designed."
+    }
   ];
-
-  // Initialization on component mount
-  onMount(async () => {
-    await fetchChallenges();
-    
-    const textarea = document.getElementById('code-editor');
-    
-    if (!textarea) {
-      console.error("Editor element not found");
-      toast.error("Failed to initialize editor");
-      return;
+  
+  // Features data
+  const features = [
+    {
+      icon: Terminal,
+      title: "Interactive Challenges",
+      description: "Practice with real-world coding challenges that test your skills and reinforce learning."
+    },
+    {
+      icon: Zap,
+      title: "Instant Feedback",
+      description: "Get immediate results and detailed explanations for your code submissions."
+    },
+    {
+      icon: BookOpen,
+      title: "Comprehensive Curriculum",
+      description: "Follow a structured learning path from basics to advanced programming concepts."
+    },
+    {
+      icon: Users,
+      title: "Community Support",
+      description: "Connect with fellow learners and mentors to solve problems together."
+    },
+    {
+      icon: Award,
+      title: "Achievement System",
+      description: "Earn badges and certificates as you progress through the curriculum."
+    },
+    {
+      icon: Rocket,
+      title: "Career Preparation",
+      description: "Build a portfolio of projects that demonstrate your skills to potential employers."
     }
+  ];
+  
+  // Languages supported with icons
+  const languages = [
+    { id: 'c', name: 'C', icon: siC, color: '#3949AB', available: true },
+    { id: 'cpp', name: 'C++', icon: siCplusplus, color: '#00599C', coming: true },
+    {id: 'tailwind', name: 'Tailwind CSS', icon: siTailwindcss, color: '#38BDF8', coming: true},
+  
+    {id: 'html', name: "HTML", icon: siHtml5, color: "#E34F26", coming: true},
+    { id: 'typescript', name: 'TypeScript', icon: siTypescript, color: '#007ACC', coming: true },
+    { id: 'php', name: 'PHP', icon: siPhp, color: '#4F5B93', coming: true },
+    { id: 'swift', name: 'Swift', icon: siSwift, color: '#F05138', coming: true },
+    {id:"kotlin", name:"Kotlin", icon: siKotlin, color:"#F18E33", coming: true},
+    { id: 'python', name: 'Python', icon: siPython, color: '#3776AB', coming: true },
+    { id: 'javascript', name: 'JavaScript', icon: siJavascript, color: '#F7DF1E', coming: true },
+   
+    { id: 'firebase', name: 'Firebase', icon: siFirebase, color: '#FFCA28', coming: true },
+    { id: 'postgresql', name: 'PostgreSQL', icon: siPostgresql, color: '#336791', coming: true },
+    { id: 'docker', name: 'Docker', icon: siDocker, color: '#2496ED', coming: true },
+    { id: 'rust', name: 'Rust', icon: siRust, color: '#FF4500', coming: true },
+    { id: 'go', name: 'Go', icon: siGo, color: '#00ADD8', coming: true },
+   
+    {id: 'haskell', name:"Haskell", icon: siHaskell, color:"#5e5086", coming: true},
+  ];
+  
+  // Initialize on component mount
+  onMount(() => {
+    // Generate line numbers
+    updateLineNumbers();
     
-
-    
-    // Wait for Monaco to load
-    if (typeof monaco === 'undefined') {
-      window.require(['vs/editor/editor.main'], initEditor);
-
-    } else {
-      initEditor();
-
-     
-    }
-
-    // Add keyboard listeners
-    window.addEventListener('keydown', handleKeyboardShortcuts);
-    
-    // Initial progress calculation
-    updateProgress();
+    // Start typing animation
+    startTypingAnimation();
     
     // Clean up on component destruction
     return () => {
-      window.removeEventListener('keydown', handleKeyboardShortcuts);
-      if (editor) editor.dispose();
+      if (typingInterval) clearInterval(typingInterval);
     };
   });
   
-  // Initialize Monaco editor
-  function initEditor() {
-    try {
-      monaco.editor.defineTheme('github-dark', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [
-        { token: 'comment', foreground: '6a737d' },
-        { token: 'keyword', foreground: 'ff7b72' },
-        { token: 'string', foreground: 'a5d6ff' },
-        { token: 'number', foreground: '79c0ff' },
-        { token: 'regexp', foreground: 'a5d6ff' },
-        { token: 'operator', foreground: 'ff7b72' },
-        { token: 'namespace', foreground: 'ff7b72' },
-        { token: 'type.identifier', foreground: '79c0ff' },
-        { token: 'identifier', foreground: 'c9d1d9' },
-        { token: 'variable', foreground: 'ffa657' },
-        { token: 'variable.predefined', foreground: '79c0ff' },
-        { token: 'function', foreground: 'd2a8ff' },
-      ],
-      colors: {
-        'editor.background': '#0d1117',
-        'editor.foreground': '#c9d1d9',
-        'editorCursor.foreground': '#c9d1d9',
-        'editor.lineHighlightBackground': '#161b22',
-        'editorLineNumber.foreground': '#6e7681',
-        'editor.selectionBackground': '#3b5070',
-        'editor.inactiveSelectionBackground': '#282e33'
-      }
-    });
-      editor = monaco.editor.create(document.getElementById('code-editor'), {
-        value: code,
-        language: 'c',
-        theme: editorTheme,
-        automaticLayout: true,
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        fontSize: 14,
-        fontFamily: '"JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
-        lineNumbers: 'on',
-        renderLineHighlight: 'all',
-        wordWrap: 'on',
-        tabSize: 4,
-        glyphMargin: true,
-        bracketPairColorization: { enabled: true },
-        "semanticHighlighting.enabled": true,
-        formatOnPaste: true,
-        formatOnType: true
-      });
-      
-      
-      editor.onDidChangeModelContent(() => {
-        code = editor.getValue();
-      });
-      
-      // Ensure editor layouts properly when resized
-      const resizeObserver = new ResizeObserver(() => {
-        if (editor) editor.layout();
-      });
-      
-      resizeObserver.observe(document.getElementById('code-editor'));
-      
-    } catch (error) {
-      console.error("Error initializing editor:", error);
-      toast.error("Failed to initialize code editor. Please refresh the page.");
-    }
+  // Update line numbers based on content
+  function updateLineNumbers() {
+    const lines = editorContent.split('\n').length;
+    lineNumbers = Array.from({ length: lines }, (_, i) => i + 1);
   }
-
   
-  // Handle keyboard shortcuts
-  function handleKeyboardShortcuts(e: KeyboardEvent) {
-    // Ctrl+Enter or Cmd+Enter to submit
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      submitCode();
-    }
+  // Simulate typing animation
+  function startTypingAnimation() {
+    const textToType = `// Let's add a new function
+void greet(const char* name) {
+  printf("Welcome to Codex, %s!\\n", name);
+}`;
     
-    // Ctrl+S or Cmd+S to save
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault();
-      saveCodeToLocalStorage();
-      toast.success('Code saved');
-    }
+    let typingPosition = editorContent.length;
+    const insertPosition = editorContent.indexOf('return 0;');
     
-    // F11 for fullscreen
-    if (e.key === 'F11') {
-      e.preventDefault();
-      toggleFullScreen();
+    if (insertPosition !== -1) {
+      editorContent = editorContent.slice(0, insertPosition) + '\n\n' + textToType + '\n\n  ' + editorContent.slice(insertPosition);
+      updateLineNumbers();
+      
+      // Simulate cursor movement and typing
+      isTyping = true;
+      let charIndex = 0;
+      
+      typingInterval = setInterval(() => {
+        charIndex++;
+        cursorPosition = insertPosition + charIndex;
+        
+        if (charIndex >= textToType.length + 4) {
+          clearInterval(typingInterval);
+          setTimeout(() => {
+            isTyping = false;
+          }, 1000);
+        }
+      }, 50);
     }
   }
   
-  // Update progress indicator
-  function updateProgress() {
-    if (!challengeIds.length) return;
-    progress = ((currentChallengeIndex + 1) / challengeIds.length) * 100;
+  // Handle tab switching
+  function switchTab(tab: string) {
+    activeTab = tab;
   }
   
-  // Fetch all challenges from API
-  async function fetchChallenges() {
-    try {
-      // Show loading toast
-      const toastId = toast.loading('Loading challenges...');
-      
-      const response = await fetch('https://api.singularity.co.ke/api/challenges');
-      if (!response.ok) {
-        throw new Error('Failed to load challenges');
-      }
-      
-      challenges = await response.json();
-      challengeIds = Object.keys(challenges);
-      
-      if (challengeIds.length > 0) {
-        currentChallengeIndex = 0;
-        await loadChallenge(challengeIds[currentChallengeIndex]);
-        toast.dismiss(toastId);
-        toast.success('Challenges loaded successfully');
-      } else {
-        toast.dismiss(toastId);
-        toast.error('No challenges found');
-      }
-    } catch (error) {
-      console.error('Error fetching challenges:', error);
-      toast.error('Failed to load challenges');
-    }
-  }
-  
-
-
-  async function loadChallenge(id: string) {
-  try {
-    const toastId = toast.loading('Loading challenge...');
+  // Mock code execution
+  function runCode() {
+    isRunning = true;
+    showOutput = false;
     
-
-    const tokenResponse = await fetch('https://codex.singularity.co.ke/api/auth/token');
-    if (!tokenResponse.ok) {
-      throw new Error('Failed to retrieve authentication token');
-    }
-    
-    const { token } = await tokenResponse.json();
-    
-    const response = await fetch(`https://api.singularity.co.ke/api/challenge/${id}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error('Challenge not found');
-    }
-    
-    currentChallenge = await response.json();
-    
-    // Format the code and set it in the editor
-    const formattedCode = currentChallenge?.initialCode.replace(/\\n/g, '\n');
-    code = formattedCode!;
-    
-    if (editor) {
-      // Set language to C
-      monaco.editor.setModelLanguage(editor.getModel(), 'c');
-      editor.setValue(formattedCode);
-    }
-    
-    
-    const savedCode = localStorage.getItem(`c_master_challenge_${id}`);
-    if (savedCode) {
-      code = savedCode;
-      if (editor) {
-        editor.setValue(savedCode);
-      }
-    }
-    
-    
-    showResults = false;
-    testResults = [];
-    showHints = false;
-    
-    updateProgress();
-    
-    toast.dismiss(toastId);
-  } catch (error) {
-    console.error('Error loading challenge:', error);
-    toast.error('Error loading challenge');
-    currentChallenge = null;
-  }
-}
-
-
-async function submitCode() {
-  if (!currentChallenge) {
-    toast.error('No challenge loaded');
-    return;
-  }
-
-  submitting = true;
-
-  try {
-    if (editor) {
-      code = editor.getValue();
-    }
-
-    const tokenResponse = await fetch('https://codex.singularity.co.ke/api/auth/token');
-    if (!tokenResponse.ok) {
-      throw new Error('Failed to retrieve authentication token');
-    }
-    
-    const { token } = await tokenResponse.json();
-
-    const response = await fetch('https://api.singularity.co.ke/api/submit', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        challengeId: currentChallenge.id,
-        code: code
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    showResults = true;
-    testResults = result.testResults || [];
-
-    // Scroll to results
+    // Simulate processing time
     setTimeout(() => {
-      const resultsSection = document.getElementById('results-section');
-      if (resultsSection) {
-        resultsSection.scrollIntoView({ behavior: 'smooth' });
+      isRunning = false;
+      showOutput = true;
+      
+      // Generate mock output based on the code
+      if (editorContent.includes('printf("Hello, World!')) {
+        outputContent = "Hello, World!\n";
       }
-    }, 100);
-
-  } catch (error) {
-    console.error('Error submitting code:', error);
-    toast.error('Error submitting code. Please try again.');
-  } finally {
-    submitting = false;
+      
+      if (editorContent.includes('greet')) {
+        outputContent += "Welcome to Codex, Programmer!\n";
+      }
+      
+      if (editorContent.includes('You\'re ready to begin!')) {
+        outputContent += "You're ready to begin!\n";
+      }
+      
+      // Random execution time between 50-200ms
+      executionTime = Math.floor(Math.random() * 150) + 50;
+      
+      // 95% chance of success
+      executionSuccess = Math.random() > 0.05;
+      
+      if (!executionSuccess) {
+        outputContent = "Error: Compilation failed.\nLine 7: Syntax error - missing semicolon.";
+      }
+    }, 800);
   }
-}
+  
+  // Copy code to clipboard
+  function copyCode() {
+    navigator.clipboard.writeText(editorContent);
+  }
   
   // Reset code to initial state
   function resetCode() {
-    if (currentChallenge && confirm('Are you sure you want to reset your code to the initial state?')) {
-      const formattedCode = currentChallenge.initialCode.replace(/\\n/g, '\n');
-      code = formattedCode;
-      
-      if (editor) {
-        editor.setValue(formattedCode);
-      }
-      
-      toast.info('Code has been reset to initial state');
-    }
+    editorContent = `#include <stdio.h>
+
+int main() {
+  // Welcome to Codex Learning Platform
+  printf("Hello, World!\\n");
+  
+  // Your coding journey starts here
+  int progress = 100;
+  
+  if (progress == 100) {
+    printf("You're ready to begin!\\n");
   }
   
-  // Save code to local storage
-  function saveCodeToLocalStorage() {
-    if (currentChallenge) {
-      localStorage.setItem(`c_master_challenge_${currentChallenge.id}`, code);
-    }
-  }
-  
-  // Change editor theme
-  function changeEditorTheme(newTheme: string) {
-    editorTheme = newTheme;
-    if (editor) {
-      monaco.editor.setTheme(newTheme);
-      toast.success(`Theme changed to ${newTheme}`);
-    }
-  }
-  
-  // Navigate between challenges
-  function navigateToChallenge(direction: 'prev' | 'next') {
-    saveCodeToLocalStorage();
-    
-    if (direction === 'next' && currentChallengeIndex < challengeIds.length - 1) {
-      currentChallengeIndex++;
-      loadChallenge(challengeIds[currentChallengeIndex]);
-    } else if (direction === 'prev' && currentChallengeIndex > 0) {
-      currentChallengeIndex--;
-      loadChallenge(challengeIds[currentChallengeIndex]);
-    }
-  }
-  
-  // Toggle fullscreen mode
-  function toggleFullScreen() {
-    isFullScreen = !isFullScreen;
-    
-    const appContainer = document.getElementById('c-master-app');
-    
-    if (isFullScreen) {
-      // Enter fullscreen
-      if (appContainer?.requestFullscreen) {
-        appContainer.requestFullscreen();
-      }
-    } else {
-      // Exit fullscreen
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      }
-    }
-    
-    // Ensure editor resizes properly
-    setTimeout(() => {
-      if (editor) editor.layout();
-    }, 100);
-  }
-  
-  // Get appropriate color for difficulty badge
-  function getDifficultyColor(difficulty: string) {
-    switch(difficulty.toLowerCase()) {
-      case 'easy': return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300';
-      case 'medium': return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300';
-      case 'hard': return 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300';
-      default: return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300';
-    }
+  return 0;
+}`;
+    updateLineNumbers();
+    showOutput = false;
   }
 </script>
 
 <svelte:head>
-  <title>Codex</title>
+  <title>Codex - Master Programming with Interactive Challenges</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
-  <!-- Monaco Editor CDN -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/editor/editor.main.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
-  <script>
-    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
-    window.MonacoEnvironment = {
-      getWorkerUrl: function(workerId, label) {
-        return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
-          self.MonacoEnvironment = {
-            baseUrl: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/'
-          };
-          importScripts('https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/base/worker/workerMain.js');`
-        )}`;
-      }
-    };
-    require(['vs/editor/editor.main']);
-  </script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700&display=swap" rel="stylesheet">
 </svelte:head>
 
-<div id="c-master-app" class="h-screen w-full flex flex-col bg-background">
-
-  <!-- Main content with LeetCode-style layout -->
-  <div class="flex-1 flex overflow-hidden">
-    {#if currentChallenge}
-      <!-- Problem description panel (left) -->
-      <div class="w-[450px] flex flex-col border-r overflow-hidden">
-        <!-- Challenge navigation -->
-        <div class="border-b px-4 py-3 flex items-center justify-between bg-muted/30">
-          <div class="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={currentChallengeIndex === 0} onclick={() => navigateToChallenge('prev')}>
-              <ChevronLeft class="h-4 w-4 mr-1" />
-              Previous
-            </Button>
+<div class="min-h-screen bg-gradient-to-b from-background to-background/95">
+  <!-- Hero Section -->
+  <section class="relative pt-24 pb-16 md:pt-32 md:pb-24 overflow-hidden">
+    <!-- Background Elements -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -top-[30%] -right-[10%] w-[70%] h-[70%] rounded-full bg-primary/5 blur-3xl"></div>
+      <div class="absolute -bottom-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-3xl"></div>
+      
+      <!-- Code Particles -->
+      <div class="absolute top-[10%] left-[5%] text-primary/10 text-4xl font-mono">{`{}`}</div>
+      <div class="absolute top-[20%] right-[15%] text-primary/10 text-4xl font-mono">{`</>`}</div>
+      <div class="absolute bottom-[30%] left-[20%] text-primary/10 text-4xl font-mono">{`()`}</div>
+      <div class="absolute bottom-[10%] right-[10%] text-primary/10 text-4xl font-mono">{`#`}</div>
+    </div>
+    
+    <div class="container px-4 md:px-6">
+      <div class="flex flex-col items-center text-center space-y-4 mb-12">
+        <div in:fade={{ delay: 200, duration: 700 }} class="inline-flex items-center justify-center p-2 bg-primary/10 backdrop-blur-sm rounded-full mb-2">
+          <Badge variant="outline" class="px-4 py-1 border-primary/20 text-primary bg-primary/5 backdrop-blur-sm">
+            <Sparkles class="h-3.5 w-3.5 mr-1" />
+            <span>Master Programming Interactively</span>
+          </Badge>
+        </div>
+        
+        <h1 in:fade={{ delay: 300, duration: 700 }} class="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight max-w-3xl">
+          Learn to Code with <span class="text-primary">Interactive</span> Challenges
+        </h1>
+        
+        <p in:fade={{ delay: 400, duration: 700 }} class="text-lg md:text-xl text-muted-foreground max-w-2xl">
+          Elevate your programming skills through hands-on practice, real-time feedback, and a structured learning path.
+        </p>
+        
+        <div in:fade={{ delay: 500, duration: 700 }} class="mt-4">
+          <Button size="lg" class="gap-2 px-8 py-6 text-lg" onclick={() => window.location.href = '/signup'}>
+            <Zap class="h-5 w-5" />
+            Start Learning Now
+          </Button>
+        </div>
+      </div>
+      
+      <!-- Enhanced Mock Editor -->
+      <div in:fade={{ delay: 600, duration: 700 }} class="max-w-5xl mx-auto">
+        <div class="rounded-xl overflow-hidden border shadow-xl bg-card/30 backdrop-blur-lg">
+          <!-- Editor Header -->
+          <div class="flex items-center justify-between px-4 py-3 bg-muted/50 border-b">
+            <div class="flex items-center gap-2">
+              <div class="flex space-x-2">
+                <div class="h-3 w-3 rounded-full bg-red-500"></div>
+                <div class="h-3 w-3 rounded-full bg-yellow-500"></div>
+                <div class="h-3 w-3 rounded-full bg-green-500"></div>
+              </div>
+              <div class="ml-4 flex items-center">
+                <Code class="h-4 w-4 mr-2 text-primary" />
+                <span class="text-sm font-medium">main.c</span>
+              </div>
+            </div>
             
-            <Button variant="outline" size="sm" disabled={currentChallengeIndex === challengeIds.length - 1} onclick={() => navigateToChallenge('next')}>
-              Next
-              <ChevronRight class="h-4 w-4 ml-1" />
+            <div class="flex items-center gap-2">
+              <Button variant="ghost" size="icon" class="h-8 w-8" on:click={resetCode} title="Reset Code">
+                <RefreshCw class="h-4 w-4" />
+              </Button>
+              
+              <Button variant="ghost" size="icon" class="h-8 w-8" on:click={copyCode} title="Copy Code">
+                <Copy class="h-4 w-4" />
+              </Button>
+              
+              <Button variant="ghost" size="icon" class="h-8 w-8" title="Fullscreen">
+                <Maximize2 class="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          
+          <!-- Editor Content -->
+          <div class="relative font-mono text-sm overflow-hidden" style="height: 400px;">
+            <div class="absolute inset-0 overflow-auto p-4 flex">
+              <!-- Line Numbers -->
+              <div class="select-none text-muted-foreground pr-4 text-right">
+                {#each lineNumbers as lineNum}
+                  <div class="h-6">{lineNum}</div>
+                {/each}
+              </div>
+              
+              <!-- Code Content -->
+              <div class="flex-1 overflow-hidden relative" bind:this={editorElement}>
+                <pre class="text-foreground"><code>{editorContent}</code></pre>
+                
+                {#if isTyping}
+                  <div class="absolute top-0 left-0 right-0 bottom-0 pointer-events-none">
+                    <div 
+                      class="absolute w-0.5 h-6 bg-primary animate-pulse"
+                      style={`top: ${Math.floor(cursorPosition / 50) * 24}px; left: ${(cursorPosition % 50) * 8}px`}
+                    ></div>
+                  </div>
+                {/if}
+              </div>
+            </div>
+            
+            <!-- Editor Overlay Gradient -->
+            <div class="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-card/80 to-transparent pointer-events-none"></div>
+          </div>
+          
+          <!-- Editor Footer -->
+          <div class="px-4 py-3 bg-muted/30 border-t flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <Badge variant="outline" class="bg-primary/10 text-primary border-primary/20">
+                <Terminal class="h-3 w-3 mr-1" />
+                Ready
+              </Badge>
+              <span class="text-xs text-muted-foreground">Syntax: OK</span>
+            </div>
+            
+            <Button 
+              size="sm" 
+              class="gap-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white"
+              on:click={runCode}
+              disabled={isRunning}
+            >
+              {#if isRunning}
+                <div class="h-3.5 w-3.5 rounded-full border-2 border-t-transparent border-white animate-spin mr-1"></div>
+                Compiling...
+              {:else}
+                <Play class="h-3.5 w-3.5 mr-1" />
+                Run Code
+              {/if}
             </Button>
           </div>
           
-          <div class="flex items-center">
-            <span class="text-sm font-medium">
-              {currentChallengeIndex + 1}/{challengeIds.length}
-            </span>
-            <Progress value={progress} class="w-20 h-1.5 ml-2" />
-          </div>
+          <!-- Output Panel (conditionally shown) -->
+          {#if showOutput}
+            <div in:slide={{ duration: 300 }} class="border-t">
+              <div class="px-4 py-2 bg-muted/50 border-b flex items-center justify-between">
+                <div class="flex items-center">
+                  <Terminal class="h-4 w-4 mr-2 text-primary" />
+                  <span class="text-sm font-medium">Output</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  {#if executionSuccess}
+                    <Badge variant="outline" class="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800">
+                      <CheckSquare class="h-3 w-3 mr-1" />
+                      Success
+                    </Badge>
+                  {:else}
+                    <Badge variant="outline" class="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800">
+                      <XSquare class="h-3 w-3 mr-1" />
+                      Error
+                    </Badge>
+                  {/if}
+                  <Badge variant="outline" class="bg-muted/50">
+                    <Clock class="h-3 w-3 mr-1" />
+                    {executionTime}ms
+                  </Badge>
+                </div>
+              </div>
+              <div class="p-4 font-mono text-sm bg-muted/20 max-h-48 overflow-auto">
+                <pre class={executionSuccess ? "text-foreground" : "text-red-500"}>{outputContent}</pre>
+              </div>
+            </div>
+          {/if}
         </div>
         
-        <!-- Challenge details -->
-        <div class="flex-1 overflow-y-auto p-4">
-          <div class="space-y-6">
-            <!-- Challenge title and metadata -->
-            <div>
-              <h2 class="text-2xl font-bold mb-2">{currentChallenge.title}</h2>
-              
-              <div class="flex flex-wrap gap-2 mb-4">
-                <Badge class={getDifficultyColor(currentChallenge.difficulty)}>
-                  {currentChallenge.difficulty}
-                </Badge>
-                
-                {#if currentChallenge.category}
-                  <Badge variant="outline">{currentChallenge.category}</Badge>
-                {/if}
-                
-                {#if currentChallenge.points}
-                  <Badge variant="secondary">
-                    <Award class="h-3.5 w-3.5 mr-1" />
-                    {currentChallenge.points} pts
-                  </Badge>
-                {/if}
-                
-                {#if currentChallenge.timeLimit}
-                  <Badge variant="outline">
-                    <Clock class="h-3.5 w-3.5 mr-1" />
-                    {currentChallenge.timeLimit}ms
-                  </Badge>
-                {/if}
-              </div>
-            </div>
-            
-            <!-- Challenge description -->
-            <div class="prose dark:prose-invert max-w-none">
-              {@html currentChallenge.description.replace(/\n/g, '<br>')}
-            </div>
-            
-            <Separator />
-            
-            <!-- Test cases -->
-            <div>
-              <h3 class="text-lg font-semibold mb-3 flex items-center">
-                <Terminal class="h-4 w-4 mr-2" />
-                Test Cases
-              </h3>
-              
-              <div class="space-y-4">
-                {#each currentChallenge.testCases.filter(tc => !tc.hidden) as testCase, i}
-                  <Card>
-                    <CardHeader class="py-2 px-4">
-                      <CardTitle class="text-sm">Example {i + 1}</CardTitle>
-                    </CardHeader>
-                    <CardContent class="py-3 px-4">
-                      <div class="space-y-3">
-                        <div>
-                          <p class="text-sm font-medium mb-1">Input:</p>
-                          <div class="font-mono text-xs bg-muted/50 p-2 rounded overflow-x-auto">
-                            {testCase.input ? testCase.input : '(empty)'}
-                          </div>
-                        </div>
-                        <div>
-                          <p class="text-sm font-medium mb-1">Expected Output:</p>
-                          <div class="font-mono text-xs bg-muted/50 p-2 rounded overflow-x-auto">
-                            {testCase.expectedOutput}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                {/each}
-              </div>
-            </div>
-            
-            <!-- Hints (collapsible) -->
-            {#if currentChallenge.hints && currentChallenge.hints.length > 0}
-              <Separator />
-              
-              <Collapsible open={showHints} onOpenChange={(open) => showHints = open}>
-                <div class="flex items-center justify-between">
-                  <h3 class="text-lg font-semibold flex items-center">
-                    <Info class="h-4 w-4 mr-2" />
-                    Hints
-                  </h3>
-                  
-                  <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm">
-                      {#if showHints}
-                        <ChevronRight class="h-4 w-4 rotate-90 transition-transform" />
-                      {:else}
-                        <ChevronRight class="h-4 w-4 transition-transform" />
-                      {/if}
-                    </Button>
-                  </CollapsibleTrigger>
+        <!-- Editor Caption -->
+        <div class="mt-4 text-center text-sm text-muted-foreground">
+          <p>Our intelligent editor provides syntax highlighting, auto-completion, and real-time error checking</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Improved Languages Section -->
+  <section class="py-16 md:py-24 relative">
+    <div class="absolute inset-0 bg-muted/30 -z-10"></div>
+    <div class="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+      <div class="absolute top-[10%] right-[10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-3xl"></div>
+      <div class="absolute bottom-[10%] left-[10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-3xl"></div>
+    </div>
+    
+    <div class="container px-4 md:px-6">
+      <div class="text-center mb-12">
+        <h2 class="text-3xl md:text-4xl font-bold mb-4 font-['Orbitron'] text-primary">Master Multiple Programming Languages</h2>
+        <p class="text-muted-foreground max-w-2xl mx-auto">
+          Starting with C programming, we're expanding to cover all major languages. Build transferable skills across the programming ecosystem.
+        </p>
+      </div>
+      
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-6 md:gap-8 max-w-5xl mx-auto">
+        {#each languages as lang, i}
+          <div in:fly={{ y: 20, delay: 100 + i * 50, duration: 400 }} class="relative group">
+            <Card class="h-full bg-card/50 backdrop-blur-sm border-muted/50 group-hover:border-primary/20 transition-all overflow-hidden">
+              <div class="absolute inset-0 opacity-5 group-hover:opacity-10 transition-opacity" style="background-color: {lang.color}"></div>
+              <CardContent class="p-6 flex flex-col items-center justify-center text-center">
+                <div class="h-16 w-16 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform" style="background-color: {lang.color}10">
+                  <!-- Language Icon using simple-icons -->
+                  <svg class="h-8 w-8" viewBox="0 0 24 24" fill="currentColor" style="color: {lang.color}">
+                    <path d={lang.icon.path} />
+                  </svg>
                 </div>
-                
-                <CollapsibleContent>
-                  <div class="space-y-2 mt-3">
-                    <Alert variant="warning" class="bg-amber-50 dark:bg-amber-950/20">
-                      <AlertDescription>
-                        Hints can help you solve this challenge, but using them might reduce points earned.
-                      </AlertDescription>
-                    </Alert>
-                    
-                    {#each currentChallenge.hints as hint, i}
-                      <Accordion type="single" collapsible class="w-full">
-                        <AccordionItem value={`hint-${i}`}>
-                          <AccordionTrigger class="text-sm">Hint {i + 1}</AccordionTrigger>
-                          <AccordionContent>
-                            <p class="text-sm">{hint}</p>
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
+                <h3 class="font-medium mb-1">{lang.name}</h3>
+                {#if lang.coming}
+                  <Badge variant="outline" class="text-xs bg-muted/50">Coming Soon</Badge>
+                {:else}
+                  <Badge variant="default" class="text-xs">Available Now</Badge>
+                {/if}
+              </CardContent>
+            </Card>
+          </div>
+        {/each}
+      </div>
+      
+      <!-- Tech Stack Section using simple-icons -->
+   
+    </div>
+  </section>
+  
+  <!-- Testimonials Section -->
+  <section class="py-16 md:py-24">
+    <div class="container px-4 md:px-6">
+      <div class="text-center mb-12">
+        <h2 class="text-3xl md:text-4xl font-bold mb-4">What Our Students Say</h2>
+        <p class="text-muted-foreground max-w-2xl mx-auto">
+          Join thousands of learners who have transformed their coding skills with Codex.
+        </p>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
+        {#each testimonials as testimonial, i}
+          <div in:fly={{ y: 20, delay: 100 + i * 100, duration: 500 }}>
+            <Card class="bg-card/50 backdrop-blur-sm border-muted/50">
+              <CardContent class="p-6">
+                <div class="flex items-center gap-4 mb-4">
+                  <Avatar>
+                    <AvatarImage src={testimonial.avatar || "/placeholder.svg"} alt={testimonial.name} />
+                    <AvatarFallback>{testimonial.name[0]}{testimonial.name.split(' ')[1][0]}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p class="font-medium">{testimonial.name}</p>
+                    <p class="text-sm text-muted-foreground">{testimonial.role}</p>
+                  </div>
+                </div>
+                <p class="italic text-muted-foreground">"{testimonial.content}"</p>
+              </CardContent>
+            </Card>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </section>
+  
+  <!-- CTA Section -->
+  <section class="py-16 md:py-24 relative">
+    <div class="absolute inset-0 bg-primary/5 -z-10"></div>
+    <div class="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+      <div class="absolute -top-[10%] -right-[10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-3xl"></div>
+      <div class="absolute -bottom-[10%] -left-[10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-3xl"></div>
+    </div>
+    
+    <div class="container px-4 md:px-6">
+      <Card class="bg-card/70 backdrop-blur-lg border-muted/50 overflow-hidden">
+        <div class="absolute top-0 left-0 w-40 h-40 bg-primary/10 rounded-full -translate-y-1/2 -translate-x-1/2 blur-2xl pointer-events-none"></div>
+        <div class="absolute bottom-0 right-0 w-40 h-40 bg-primary/10 rounded-full translate-y-1/2 translate-x-1/2 blur-2xl pointer-events-none"></div>
+        
+        <CardContent class="p-8 md:p-12">
+          <div class="grid gap-8 md:grid-cols-2 items-center">
+            <div>
+              <h2 class="text-3xl md:text-4xl font-bold mb-4">Ready to Start Your Coding Journey?</h2>
+              <p class="text-muted-foreground mb-6">
+                Join our community of learners and start mastering programming skills that will advance your career.
+              </p>
+              <div>
+                <Button size="lg" class="gap-2 px-8 py-6 text-lg">
+                  <Zap class="h-5 w-5" />
+                  Get Started 
+                </Button>
+              </div>
+            </div>
+            
+            <div class="bg-muted/30 rounded-lg p-6 border border-muted/50">
+              <h3 class="text-xl font-semibold mb-4 flex items-center">
+                <CheckCircle class="h-5 w-5 text-primary mr-2" />
+                What You'll Get
+              </h3>
+              <ul class="space-y-3">
+                {#each [
+                  "Access to 100+ interactive coding challenges",
+                  "Real-time feedback on your code",
+                  "Structured learning path from basics to advanced",
+                  "Community support from fellow learners",
+                  "Progress tracking and achievement system"
+                ] as item}
+                  <li class="flex items-start">
+                    <CheckCircle class="h-5 w-5 text-primary shrink-0 mr-2 mt-0.5" />
+                    <span>{item}</span>
+                  </li>
+                {/each}
+              </ul>
+              <div class="mt-6 pt-4 border-t border-muted/50 flex items-center justify-between">
+                <div>
+                  <p class="text-sm text-muted-foreground">Join 10,000+ developers</p>
+                  <div class="flex -space-x-2 mt-1">
+                    {#each Array(5) as _, i}
+                      <Avatar class="h-6 w-6 border-2 border-background">
+                        <AvatarImage src={`/placeholder.svg?height=24&width=24&text=${i+1}`} />
+                        <AvatarFallback>U{i+1}</AvatarFallback>
+                      </Avatar>
                     {/each}
                   </div>
-                </CollapsibleContent>
-              </Collapsible>
-            {/if}
-          </div>
-        </div>
-      </div>
-      
-      <!-- Code editor and results (right) -->
-      <div class="flex-1 flex flex-col overflow-hidden">
-        <!-- Editor toolbar -->
-        <div class="border-b bg-muted/20 px-4 py-2 flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <span class="font-semibold">Solution.c</span>
-            <Badge>C</Badge>
-          </div>
-          
-          <div class="flex items-center gap-2">
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-               
-                <button class="flex align-middle items-center border px-2 py-1 border-gray-200 rounded-md" on:click={()=>resetCode()}>
-                  <RotateCcw class="h-4 w-4 mr-1" />
-                  Reset
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Content>Reset to starter code</Tooltip.Content>
-            </Tooltip.Root>
-            
-            <Tooltip.Root>
-              <Tooltip.Trigger asChild>
-                <button class="flex align-middle items-center border px-2 py-1 border-gray-200 rounded-md" on:click={()=>toggleFullScreen()}>
-                  {#if isFullScreen}
-                    <Minimize2 class="h-4 w-4 mr-1" />
-                    Exit Fullscreen
-                  {:else}
-                    <Maximize2 class="h-4 w-4 mr-1" />
-                    Fullscreen
-                  {/if}
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Content>Toggle fullscreen (F11)</Tooltip.Content>
-            </Tooltip.Root>
-          </div>
-        </div>
-        
-
-        <div class="flex-1 overflow-hidden relative">
-          <div id="code-editor" class="absolute inset-0"></div>
-        </div>
-        
- 
-        <div class="border-t bg-muted/20 p-2 flex items-center justify-between">
-          <div class="text-xs text-muted-foreground flex items-center">
-            <Keyboard class="h-3 w-3 mr-1" />
-            <span>Ctrl+Enter to run | Ctrl+S to save</span>
-          </div>
-          
-   
-   <button 
-   on:click={() => submitCode()}
-   disabled={submitting} 
-   class="inline-flex items-center justify-center rounded-md text-sm font-medium bg-green-600 hover:bg-green-700 text-white px-4 py-2"
- >
-   {#if submitting}
-     <Loader class="h-4 w-4 mr-2 animate-spin" />
-     Compiling...
-   {:else}
-     <Zap class="h-4 w-4 mr-2" />
-     Run Code
-   {/if}
- </button>
-        </div>
-        
-      
-        <div id="results-section" class="border-t overflow-y-auto" style="max-height: 40%;">
-          {#if showResults && testResults.length > 0}
-            <div class="p-4">
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold flex items-center">
-                  <Terminal class="h-5 w-5 mr-2" />
-                  Test Results
-                </h3>
-                
-                <div class="flex items-center">
-                  <span class="text-sm font-medium mr-2">
-                    {testResults.filter(r => r.passed).length}/{testResults.length} tests passed
-                  </span>
-                  <Progress 
-                    value={(testResults.filter(r => r.passed).length / testResults.length) * 100} 
-                    class="w-20 h-2" 
-                    indicatorClass={testResults.every(t => t.passed) ? "bg-green-600" : "bg-amber-500"}
-                  />
                 </div>
+                <Button variant="ghost" class="gap-1 text-primary">
+                  <span>View Success Stories</span>
+                  <ArrowRight class="h-4 w-4" />
+                </Button>
               </div>
-              
-              <div class="space-y-3">
-                {#each testResults as result, i}
-                  <Card class={result.passed ? 
-                    "border-green-200 dark:border-green-800" : 
-                    "border-red-200 dark:border-red-800"}>
-                    <CardHeader class="py-2 px-4 flex flex-row items-center justify-between">
-                      <CardTitle class="text-sm flex items-center">
-                        {#if result.passed}
-                          <CheckCircle class="h-4 w-4 mr-2 text-green-600 dark:text-green-500" />
-                          <span class="text-green-700 dark:text-green-400">Test {i + 1} Passed</span>
-                        {:else}
-                          <XCircle class="h-4 w-4 mr-2 text-red-600 dark:text-red-500" />
-                          <span class="text-red-700 dark:text-red-400">Test {i + 1} Failed</span>
-                        {/if}
-                      </CardTitle>
-                      
-                      {#if result.executionTime !== undefined}
-                        <Badge variant="outline" class="ml-auto">
-                          <Clock class="h-3 w-3 mr-1" />
-                          {result.executionTime}ms
-                        </Badge>
-                      {/if}
-                    </CardHeader>
-                    
-                    <Collapsible>
-                      <CollapsibleTrigger class="flex items-center justify-center w-full py-1 hover:bg-muted/50 text-xs text-muted-foreground">
-                        <ChevronRight class="h-4 w-4 rotate-90 transition-transform" />
-                        Details
-                      </CollapsibleTrigger>
-                      
-                      <CollapsibleContent>
-                        <CardContent class="py-3 px-4 border-t">
-                          <div class="space-y-3">
-                            {#if result.error}
-                              <div>
-                                <p class="text-sm font-medium mb-1">Error:</p>
-                                <pre class="text-xs p-3 bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-300 rounded-md overflow-x-auto">{result.error}</pre>
-                              </div>
-                            {/if}
-                            
-                            {#if result.output !== undefined}
-                              <div>
-                                <p class="text-sm font-medium mb-1">Your Output:</p>
-                                <pre class="text-xs p-3 bg-muted rounded-md overflow-x-auto">{result.output}</pre>
-                              </div>
-                            {/if}
-                          </div>
-                        </CardContent>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </Card>
-                {/each}
-              </div>
-              
-              {#if testResults.every(test => test.passed)}
-                <div class="mt-4">
-                  <Card class="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
-                    <CardContent class="py-4 flex items-center justify-between">
-                      <div>
-                        <h3 class="font-semibold text-green-700 dark:text-green-400">
-                          Challenge Completed Successfully!
-                        </h3>
-                        <p class="text-sm text-green-600 dark:text-green-500">
-                          All tests passed. Great job!
-                        </p>
-                      </div>
-                      
-                      <Button 
-                        on:click={() => navigateToChallenge('next')} 
-                        disabled={currentChallengeIndex === challengeIds.length - 1}
-                        class="bg-green-600 hover:bg-green-700"
-                      >
-                        Next Challenge
-                        <ArrowRight class="h-4 w-4 ml-2" />
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </div>
-              {/if}
             </div>
-          {:else}
-          <div class="flex flex-col items-center justify-center py-8 text-muted-foreground">
-            <Terminal class="h-8 w-8 mb-3" />
-            <h3 class="text-base font-medium">Run your code to see test results</h3>
-            <p class="text-sm">Press Ctrl+Enter or click the Run Code button above</p>
           </div>
-        {/if}
-      </div>
+        </CardContent>
+      </Card>
     </div>
-  {:else}
-  
-    <div class="flex-1 flex flex-col items-center justify-center">
-      <Loader class="h-10 w-10 animate-spin text-muted-foreground mb-4" />
-      <p class="text-lg font-medium">Loading challenges...</p>
-      <p class="text-sm text-muted-foreground mt-2">Please wait while we load your programming challenges</p>
-    </div>
-  {/if}
-</div>
+  </section>
 </div>
 
 <style>
-:global(.monaco-editor .minimap) {
-  display: none !important;
-}
-
-:global(.monaco-editor .margin) {
-  background-color: transparent !important;
-}
-
-:global(.monaco-editor .line-numbers) {
-  color: var(--text-muted) !important;
-}
-
-:global(body) {
-  font-family: 'Inter', sans-serif;
-}
-
-.prose pre {
-  padding: 0.75rem;
-  border-radius: 0.375rem;
-  background-color: rgb(var(--muted) / 0.5);
-  overflow-x: auto;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.875rem;
-}
-
-.prose code {
-  font-family: 'JetBrains Mono', monospace;
-  background-color: rgb(var(--muted) / 0.5);
-  padding: 0.125rem 0.25rem;
-  border-radius: 0.25rem;
-  font-size: 0.875rem;
-}
+  :global(body) {
+    font-family: 'Inter', sans-serif;
+  }
+  
+  pre, code {
+    font-family: 'JetBrains Mono', monospace;
+  }
+  
+  /* Syntax highlighting */
+  code .keyword { color: #ff7b72; }
+  code .string { color: #a5d6ff; }
+  code .comment { color: #8b949e; }
+  code .number { color: #79c0ff; }
+  code .function { color: #d2a8ff; }
+  
+  /* Custom scrollbar for code editor */
+  :global(.overflow-auto::-webkit-scrollbar) {
+    width: 8px;
+    height: 8px;
+  }
+  
+  :global(.overflow-auto::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+  
+  :global(.overflow-auto::-webkit-scrollbar-thumb) {
+    background: rgba(127, 127, 127, 0.2);
+    border-radius: 4px;
+  }
+  
+  :global(.overflow-auto::-webkit-scrollbar-thumb:hover) {
+    background: rgba(127, 127, 127, 0.3);
+  }
 </style>
