@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	judge0BaseURL = "http://localhost:2358"
+	judge0BaseURL = "http://host.docker.internal:2358"
 	submitURL     = judge0BaseURL + "/submissions"
 	statusURL     = judge0BaseURL + "/submissions/%s"
 )
