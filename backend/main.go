@@ -60,6 +60,7 @@ func main() {
 				"https://codex.singularity.co.ke",
 				"http://localhost:5173",
 				"http://localhost:3000",
+				"http://localhost:8080",
 			}
 
 			origin := r.Header.Get("Origin")
