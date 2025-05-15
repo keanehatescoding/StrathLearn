@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Vulnerable XSS Demo</title>
+</head>
+<body>
+    <h2>Vulnerable Comment Box</h2>
+    <form method="GET">
+        <label for="comment">Enter your comment:</label><br>
+        <input type="text" name="comment" id="comment">
+        <input type="submit" value="Post">
+    </form>
+
+    <h3>Your Comment:</h3>
+    <div id="output">
+        <!-- This is where we inject unsanitized user input -->
+        <script>
+            const params = new URLSearchParams(window.location.search);
+            const comment = params.get("comment");
+            if (comment) {
+                document.write(comment); // 👈 UNSAFE: directly writing user input
+            }
+        </script>
+    </div>
+</body>
+</html>

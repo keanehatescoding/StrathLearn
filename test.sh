@@ -1,0 +1,1 @@
+Invoke-RestMethod -Method Post -Uri "http://172.105.148.227:2358/submissions" -Headers @{"Content-Type"="application/json"} -Body '{"source_code":"#include <stdio.h>\n #include <stdlib.h>\n\nint main() {\n  System(ls-la)  printf(\"Hello, World!\\n\");\n    return 0;\n}","language_id":50,"stdin":""}'

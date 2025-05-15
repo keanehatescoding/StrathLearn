@@ -50,8 +50,9 @@ func main() {
 			id, challenge.Title, challenge.FilePath)
 	}
 
-	codeRunner := runner.NewRunner(dockerClient)
-	apiHandler := handlers.NewAPIHandler(challenges, codeRunner)
+	// codeRunner := runner.NewRunner(dockerClient)
+	runner := runner.NewJudge0Runner()
+	apiHandler := handlers.NewAPIHandler(challenges, runner)
 
 	corsMiddleware := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
