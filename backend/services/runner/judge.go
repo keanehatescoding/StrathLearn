@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"strathlearn/backend/models"
@@ -24,7 +25,7 @@ type Judge0Runner struct {
 
 type Judge0SubmissionRequest struct {
 	SourceCode     string  `json:"source_code"`
-	Language       int     `json:"language_id"` // 103 for C (gcc)
+	Language       int     `json:"language_id"` // Language ID (50 for C, as seen in frontend)
 	Stdin          string  `json:"stdin,omitempty"`
 	ExpectedOutput string  `json:"expected_output,omitempty"`
 	Base64Encoded  bool    `json:"base64_encoded"`
@@ -67,9 +68,12 @@ func (r *Judge0Runner) RunTests(code string, challenge models.Challenge) []model
 	results := make([]models.TestResult, 0, len(challenge.TestCases))
 
 	for _, tc := range challenge.TestCases {
+		// Initialize result with expected frontend keys
 		result := models.TestResult{
-			TestCaseID: tc.ID,
+			TestCaseID: tc.ID,    // Frontend expects camelCase
 			Passed:     false,
+			Output:     "",       // Initialize empty string to avoid null in JSON
+			Error:      "",       // Initialize empty string to avoid null in JSON
 		}
 
 		token, err := r.submitCode(code, tc.Input, challenge.TimeLimit, challenge.MemoryLimit)
@@ -92,6 +96,17 @@ func (r *Judge0Runner) RunTests(code string, challenge models.Challenge) []model
 		// Process the response
 		if response.Status.ID == 3 { // 3 means "Accepted" in Judge0
 			result.Output = utils.CleanOutput(response.Stdout)
+
+			// Set execution time as float
+			if response.Time != "" {
+				executionTime, err := strconv.ParseFloat(response.Time, 64)
+				if err == nil {
+					result.ExecutionTime = executionTime
+				}
+			}
+			
+			// Set memory usage
+			result.Memory = response.Memory
 
 			expectedOutput := utils.CleanOutput(tc.ExpectedOutput)
 			log.Printf("Expected output: '%s'", expectedOutput)
@@ -123,7 +138,7 @@ func (r *Judge0Runner) RunTests(code string, challenge models.Challenge) []model
 func (r *Judge0Runner) submitCode(code, input string, timeLimit, memoryLimit int) (string, error) {
 	submission := Judge0SubmissionRequest{
 		SourceCode:     code,
-		Language:       50,
+		Language:       50,  // Match the frontend's default language ID for C
 		Stdin:          input,
 		Base64Encoded:  false,
 		CPUTimeLimit:   float64(timeLimit),

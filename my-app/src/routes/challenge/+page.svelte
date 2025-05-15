@@ -740,7 +740,7 @@
               <div>
                 <h3 class="text-lg font-semibold mb-3 flex items-center">
                   <Server class="h-4 w-4 mr-2" />
-                  Judge0 Execution Statistics
+                  Execution Statistics
                 </h3>
                 
                 <div class="grid grid-cols-2 gap-4">
@@ -802,7 +802,7 @@
                   <Card>
                     <CardContent class="pt-6">
                       <div class="flex flex-col items-center">
-                        <p class="text-sm text-muted-foreground mb-1">Judge0 Processing</p>
+                        <p class="text-sm text-muted-foreground mb-1"> Processing</p>
                         <p class="text-2xl font-bold">v1.13.0</p>
                         <p class="text-xs text-muted-foreground mt-1">
                           GCC 9.2.0 compliant
@@ -812,7 +812,7 @@
                             Standard C11
                           </Badge>
                           <Badge variant="outline" class="bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800">
-                            Judge0 API
+                            API
                           </Badge>
                         </div>
                       </div>

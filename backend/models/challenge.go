@@ -27,10 +27,12 @@ type SubmissionRequest struct {
 }
 
 type TestResult struct {
-	TestCaseID string `json:"testCaseId"`
-	Passed     bool   `json:"passed"`
-	Output     string `json:"output"`
-	Error      string `json:"error"`
+	TestCaseID    string  `json:"testCaseId"` // Frontend expects camelCase
+	Passed        bool    `json:"passed"`
+	Output        string  `json:"output,omitempty"`
+	Error         string  `json:"error,omitempty"`
+	ExecutionTime float64 `json:"executionTime,omitempty"`
+	Memory        int     `json:"memory,omitempty"`
 }
 
 type SubmissionResponse struct {
