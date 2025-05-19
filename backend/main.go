@@ -111,12 +111,16 @@ func main() {
 	protectedMux.HandleFunc("/api/submit", apiHandler.SubmitSolution)
 	protectedMux.HandleFunc("/debug", apiHandler.Debug)
 	protectedMux.HandleFunc("/api/test-auth", apiHandler.TestAuth)
+	protectedMux.HandleFunc("/api/profile", apiHandler.GetUserProfile)
+	protectedMux.HandleFunc("/api/profile/submissions", apiHandler.GetUserSubmissions)
 
 	authHandler := auth.AuthMiddleware(protectedMux)
 	http.Handle("/api/challenge/", corsMiddleware(authHandler))
 	http.Handle("/api/submit", corsMiddleware(authHandler))
 	http.Handle("/debug", corsMiddleware(authHandler))
 	http.Handle("/api/test-auth", corsMiddleware(authHandler))
+	http.Handle("/api/profile", corsMiddleware(authHandler))
+	http.Handle("/api/profile/submissions", corsMiddleware(authHandler))
 
 	fs := http.FileServer(http.Dir("./frontend"))
 	http.Handle("/", fs)
