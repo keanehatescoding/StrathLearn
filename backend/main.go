@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"strathlearn/backend/auth"
+	"strathlearn/backend/db"
 	"strathlearn/backend/handlers"
 	"strathlearn/backend/services"
 	"strathlearn/backend/services/runner"
@@ -18,6 +19,12 @@ var dockerClient *client.Client
 
 func main() {
 	log.Println("Starting server...")
+	log.Println("Connecting to database...")
+	dbConn, dbErr := db.Connect()
+	if dbErr != nil {
+		log.Fatalf("Failed to connect to database: %v", dbErr)
+	}
+	defer db.Disconnect(dbConn)
 	currentDir, _ := os.Getwd()
 	log.Printf("Current working directory: %s", currentDir)
 

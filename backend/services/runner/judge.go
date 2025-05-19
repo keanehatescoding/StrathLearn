@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strathlearn/backend/db"
 	"strconv"
 	"time"
 
@@ -70,10 +71,10 @@ func (r *Judge0Runner) RunTests(code string, challenge models.Challenge) []model
 	for _, tc := range challenge.TestCases {
 		// Initialize result with expected frontend keys
 		result := models.TestResult{
-			TestCaseID: tc.ID,    // Frontend expects camelCase
+			TestCaseID: tc.ID, // Frontend expects camelCase
 			Passed:     false,
-			Output:     "",       // Initialize empty string to avoid null in JSON
-			Error:      "",       // Initialize empty string to avoid null in JSON
+			Output:     "", // Initialize empty string to avoid null in JSON
+			Error:      "", // Initialize empty string to avoid null in JSON
 		}
 
 		token, err := r.submitCode(code, tc.Input, challenge.TimeLimit, challenge.MemoryLimit)
@@ -104,7 +105,7 @@ func (r *Judge0Runner) RunTests(code string, challenge models.Challenge) []model
 					result.ExecutionTime = executionTime
 				}
 			}
-			
+
 			// Set memory usage
 			result.Memory = response.Memory
 
@@ -138,7 +139,7 @@ func (r *Judge0Runner) RunTests(code string, challenge models.Challenge) []model
 func (r *Judge0Runner) submitCode(code, input string, timeLimit, memoryLimit int) (string, error) {
 	submission := Judge0SubmissionRequest{
 		SourceCode:     code,
-		Language:       50,  // Match the frontend's default language ID for C
+		Language:       50, // Match the frontend's default language ID for C
 		Stdin:          input,
 		Base64Encoded:  false,
 		CPUTimeLimit:   float64(timeLimit),
@@ -173,13 +174,34 @@ func (r *Judge0Runner) submitCode(code, input string, timeLimit, memoryLimit int
 		return "", err
 	}
 
+	timeValue, _ := strconv.ParseFloat(response.Time, 64)
+	dbSubmission := db.Submission{
+		ID:            response.Token, // Using the token as the ID
+		ChallengeID:   "",             // You'll need to pass the challenge ID to this function
+		UserID:        "",             // You'll need to pass the user ID to this function
+		Language:      "C",            // Based on language ID 50, you might want to store actual language name
+		Code:          code,
+		Stdout:        response.Stdout,
+		Stderr:        response.Stderr,
+		CompileOutput: response.CompileOutput,
+		Message:       response.Message,
+		StatusCode:    response.Status.ID,
+		StatusDesc:    response.Status.Description,
+		Memory:        response.Memory,
+		Time:          timeValue,
+		Token:         response.Token,
+	}
+
+	if err := db.DB.Create(&dbSubmission).Error; err != nil {
+		log.Printf("Failed to save submission to database: %v", err)
+	}
+
 	return response.Token, nil
 }
 
 func (r *Judge0Runner) waitForResult(token string) (*Judge0SubmissionResponse, error) {
 	url := fmt.Sprintf(statusURL, token)
 
-	// Poll until we get a result
 	maxRetries := 10
 	for i := 0; i < maxRetries; i++ {
 		req, err := http.NewRequest("GET", url, nil)
@@ -199,12 +221,10 @@ func (r *Judge0Runner) waitForResult(token string) (*Judge0SubmissionResponse, e
 			return nil, err
 		}
 
-		// Check if processing is complete
 		if response.Status.ID >= 3 {
 			return &response, nil
 		}
 
-		// Wait before polling again
 		time.Sleep(1 * time.Second)
 	}
 
