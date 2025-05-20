@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
+	"sort"
 	"time"
 
 	"strathlearn/backend/auth"
@@ -16,6 +16,7 @@ type DailySubmission struct {
 	ChallengeID string `json:"challengeId,omitempty"`
 }
 
+// Enhanced GetUserSubmissions to include streak information
 func (h *APIHandler) GetUserSubmissions(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.GetUserFromContext(r)
 	if !ok {
@@ -30,7 +31,7 @@ func (h *APIHandler) GetUserSubmissions(w http.ResponseWriter, r *http.Request) 
 	var err error
 
 	if startDateStr == "" {
-		startDate = time.Now().AddDate(-1, 0, 0)
+		startDate = time.Now().AddDate(-1, 0, 0) // Default to 1 year ago
 	} else {
 		startDate, err = time.Parse("2006-01-02", startDateStr)
 		if err != nil {
@@ -61,14 +62,17 @@ func (h *APIHandler) GetUserSubmissions(w http.ResponseWriter, r *http.Request) 
 		Group("DATE(created_at), challenge_id").
 		Order("date ASC").
 		Find(&submissions)
-	profile := db.DB.Model(&db.Profile{}).
-		Where("user_id = ?", user.ID).Find(&db.Profile{})
-	log.Printf("Profile: %v", profile)
 
 	if result.Error != nil {
 		http.Error(w, "Failed to fetch submissions: "+result.Error.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Calculate streaks
+	var profile db.Profile
+	db.DB.Where("user_id = ?", user.ID).First(&profile)
+
+	activeStreak, longestStreak := calculateStreaks(submissions)
 
 	dailySubmissions := make([]DailySubmission, 0, len(submissions))
 	for _, sub := range submissions {
@@ -81,10 +85,53 @@ func (h *APIHandler) GetUserSubmissions(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"submissions": dailySubmissions,
+		"submissions":   dailySubmissions,
+		"activeStreak":  activeStreak,
+		"longestStreak": longestStreak,
 	})
 }
 
+func calculateStreaks(submissions []struct {
+	Date        time.Time
+	Count       int
+	ChallengeID string
+}) (activeStreak int, longestStreak int) {
+	if len(submissions) == 0 {
+		return 0, 0
+	}
+
+	sort.Slice(submissions, func(i, j int) bool {
+		return submissions[i].Date.Before(submissions[j].Date)
+	})
+
+	currentStreak := 1
+	maxStreak := 1
+	lastDate := submissions[0].Date
+
+	for i := 1; i < len(submissions); i++ {
+		dayDiff := submissions[i].Date.Sub(lastDate).Hours() / 24
+		if dayDiff == 1 {
+
+			currentStreak++
+		} else if dayDiff > 1 {
+
+			maxStreak = max(maxStreak, currentStreak)
+			currentStreak = 1
+		}
+		lastDate = submissions[i].Date
+	}
+
+	now := time.Now()
+	daysSinceLastSubmission := now.Sub(submissions[len(submissions)-1].Date).Hours() / 24
+
+	if daysSinceLastSubmission > 1 {
+
+		maxStreak = max(maxStreak, currentStreak)
+		currentStreak = 0
+	}
+
+	return currentStreak, maxStreak
+}
 func (h *APIHandler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.GetUserFromContext(r)
 	if !ok {
@@ -127,15 +174,6 @@ func (h *APIHandler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 			"challengesSolved": stats.ChallengeSolved,
 			"firstSubmission":  stats.FirstSubmission,
 			"lastSubmission":   stats.LastSubmission,
-		},
-		"profile": map[string]interface{}{
-			"rank":             db.Profile{}.Rank,
-			"challengesSolved": db.Profile{}.ChallengesSolved,
-			"friends":          db.Profile{}.Friends,
-			"friendCount":      db.Profile{}.FriendCount,
-			"friendRequests":   db.Profile{}.FriendRequests,
-			"streaks":          db.Profile{}.Streaks,
-			"lastStreakDate":   db.Profile{}.LastStreakDate,
 		},
 	})
 }
