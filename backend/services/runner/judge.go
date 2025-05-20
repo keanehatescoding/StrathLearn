@@ -21,10 +21,12 @@ const (
 	statusURL     = judge0BaseURL + "/submissions/%s"
 )
 
+// Judge0Runner implements the Runner interface using Judge0 API
 type Judge0Runner struct {
 	client *http.Client
 }
 
+// Judge0SubmissionRequest represents the request body for creating a submission
 type Judge0SubmissionRequest struct {
 	SourceCode           string  `json:"source_code"`
 	LanguageID           int     `json:"language_id"`
@@ -45,11 +47,13 @@ type Judge0SubmissionRequest struct {
 	CommandLineArgs      string  `json:"command_line_arguments,omitempty"`
 }
 
+// Judge0Status represents the status of a submission
 type Judge0Status struct {
 	ID          int    `json:"id"`
 	Description string `json:"description"`
 }
 
+// Judge0SubmissionResponse represents the response from Judge0 API
 type Judge0SubmissionResponse struct {
 	Stdout        string       `json:"stdout"`
 	Stderr        string       `json:"stderr"`
@@ -66,6 +70,7 @@ type Judge0SubmissionResponse struct {
 	Memory        int          `json:"memory"`
 }
 
+// Status ID constants from Judge0
 const (
 	StatusInQueue             = 1
 	StatusProcessing          = 2
@@ -83,6 +88,7 @@ const (
 	StatusExecFormatError     = 14
 )
 
+// Language ID constants for Judge0
 const (
 	LangC          = 50
 	LangCPP        = 54
@@ -91,6 +97,7 @@ const (
 	LangJavaScript = 63
 )
 
+// NewJudge0Runner creates a new Judge0Runner
 func NewJudge0Runner() *Judge0Runner {
 	return &Judge0Runner{
 		client: &http.Client{
@@ -99,15 +106,19 @@ func NewJudge0Runner() *Judge0Runner {
 	}
 }
 
+// IsDockerAvailable implements the Runner interface
 func (r *Judge0Runner) IsDockerAvailable() bool {
+	// Always return true as Judge0 is running in a separate container
 	return true
 }
 
+// RunTests runs the tests for a challenge
 func (r *Judge0Runner) RunTests(code string, challenge models.Challenge) []models.TestResult {
 	log.Printf("Running tests for challenge: %s with %d test cases", challenge.ID, len(challenge.TestCases))
 	results := make([]models.TestResult, 0, len(challenge.TestCases))
 
 	for _, tc := range challenge.TestCases {
+		// Initialize result with expected frontend keys
 		result := models.TestResult{
 			TestCaseID:    tc.ID,
 			Passed:        false,
@@ -117,6 +128,7 @@ func (r *Judge0Runner) RunTests(code string, challenge models.Challenge) []model
 			Memory:        0,
 		}
 
+		// Submit code to Judge0
 		token, err := r.submitCode(code, tc.Input, challenge.TimeLimit, challenge.MemoryLimit, challenge.ID)
 		if err != nil {
 			log.Printf("Error submitting code: %v", err)
@@ -125,6 +137,7 @@ func (r *Judge0Runner) RunTests(code string, challenge models.Challenge) []model
 			continue
 		}
 
+		// Poll for submission status
 		response, err := r.waitForResult(token)
 		if err != nil {
 			log.Printf("Error getting submission result: %v", err)
@@ -133,6 +146,7 @@ func (r *Judge0Runner) RunTests(code string, challenge models.Challenge) []model
 			continue
 		}
 
+		// Process the response based on status
 		result = r.processResponse(response, tc.ExpectedOutput, result)
 
 		results = append(results, result)
@@ -141,7 +155,9 @@ func (r *Judge0Runner) RunTests(code string, challenge models.Challenge) []model
 	return results
 }
 
+// processResponse processes the Judge0 response and updates the test result
 func (r *Judge0Runner) processResponse(response *Judge0SubmissionResponse, expectedOutput string, result models.TestResult) models.TestResult {
+	// Set execution time if available
 	if response.Time != "" {
 		executionTime, err := strconv.ParseFloat(response.Time, 64)
 		if err == nil {
@@ -149,8 +165,10 @@ func (r *Judge0Runner) processResponse(response *Judge0SubmissionResponse, expec
 		}
 	}
 
+	// Set memory usage
 	result.Memory = response.Memory
 
+	// Process based on status
 	switch response.Status.ID {
 	case StatusAccepted:
 		result.Output = utils.CleanOutput(response.Stdout)
@@ -217,32 +235,33 @@ func (r *Judge0Runner) processResponse(response *Judge0SubmissionResponse, expec
 	return result
 }
 
+// submitCode submits code to Judge0
 func (r *Judge0Runner) submitCode(code, input string, timeLimit, memoryLimit int, challengeID string) (string, error) {
+	// Default to 2 seconds if timeLimit is 0
 	if timeLimit <= 0 {
-		timeLimit = 5
+		timeLimit = 2
 	}
 
+	// Default to 128MB if memoryLimit is 0
 	if memoryLimit <= 0 {
-		memoryLimit = 512 * 1024
+		memoryLimit = 128 * 1024 // 128MB in KB
 	} else {
-		memoryLimit = memoryLimit * 1024
+		memoryLimit = memoryLimit * 1024 // Convert MB to KB
 	}
 
+	// Keep memory limit within reasonable bounds (max 512MB)
+	if memoryLimit > 512*1024 {
+		memoryLimit = 512 * 1024
+	}
+
+	// Create submission request with minimal required parameters
 	submission := Judge0SubmissionRequest{
-		SourceCode:           code,
-		LanguageID:           LangC,
-		Stdin:                input,
-		CPUTimeLimit:         float64(timeLimit),
-		CPUExtraTime:         1.0,
-		WallTimeLimit:        float64(timeLimit) + 2.0,
-		MemoryLimit:          memoryLimit,
-		StackLimit:           memoryLimit,
-		MaxProcessesThreads:  30,
-		EnablePerThreadLimit: true,
-		EnablePerThreadMem:   true,
-		MaxFileSize:          1024,
-		RedirectStderr:       false,
-		EnableNetwork:        false,
+		SourceCode:   code,
+		LanguageID:   LangC, // Default to C
+		Stdin:        input,
+		CPUTimeLimit: float64(timeLimit),
+		MemoryLimit:  memoryLimit,
+		// Don't set stack_limit - use Judge0 default
 	}
 
 	jsonData, err := json.Marshal(submission)
@@ -252,6 +271,7 @@ func (r *Judge0Runner) submitCode(code, input string, timeLimit, memoryLimit int
 
 	log.Printf("Submitting code to Judge0: %s", string(jsonData))
 
+	// Create the request
 	req, err := http.NewRequest("POST", submitURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("error creating request: %v", err)
@@ -259,33 +279,38 @@ func (r *Judge0Runner) submitCode(code, input string, timeLimit, memoryLimit int
 
 	req.Header.Set("Content-Type", "application/json")
 
+	// Add query parameter for base64 encoding
 	q := req.URL.Query()
 	q.Add("base64_encoded", "false")
 	req.URL.RawQuery = q.Encode()
 
+	// Send the request
 	resp, err := r.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("error sending request: %v", err)
 	}
 	defer resp.Body.Close()
 
+	// Check response status
 	if resp.StatusCode != http.StatusCreated {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("failed to submit code, status: %d, response: %s",
 			resp.StatusCode, string(bodyBytes))
 	}
 
+	// Parse the response
 	var response Judge0SubmissionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return "", fmt.Errorf("error decoding response: %v", err)
 	}
 
+	// Store submission in database
 	timeValue, _ := strconv.ParseFloat(response.Time, 64)
 
 	dbSubmission := db.Submission{
 		ID:            response.Token,
 		ChallengeID:   challengeID,
-		UserID:        "",
+		UserID:        "", // Would need to be passed in
 		Language:      "C",
 		Code:          code,
 		Stdout:        response.Stdout,
@@ -302,38 +327,45 @@ func (r *Judge0Runner) submitCode(code, input string, timeLimit, memoryLimit int
 
 	if err := db.DB.Create(&dbSubmission).Error; err != nil {
 		log.Printf("Failed to save submission to database: %v", err)
+		// Continue anyway, this is not critical
 	}
 
 	return response.Token, nil
 }
 
+// waitForResult waits for the submission result
 func (r *Judge0Runner) waitForResult(token string) (*Judge0SubmissionResponse, error) {
 	url := fmt.Sprintf(statusURL, token)
 
-	maxRetries := 60
-	retryInterval := 500 * time.Millisecond
+	maxRetries := 60                        // Increased for longer-running submissions
+	retryInterval := 500 * time.Millisecond // 0.5 seconds
 
 	for i := 0; i < maxRetries; i++ {
+		// Create the request
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			return nil, fmt.Errorf("error creating status request: %v", err)
 		}
 
+		// Add query parameter for base64 encoding
 		q := req.URL.Query()
 		q.Add("base64_encoded", "false")
-		q.Add("fields", "*")
+		q.Add("fields", "*") // Get all fields
 		req.URL.RawQuery = q.Encode()
 
+		// Send the request
 		resp, err := r.client.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("error checking submission status: %v", err)
 		}
 
+		// Check response status
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
 			return nil, fmt.Errorf("error response from Judge0: %d", resp.StatusCode)
 		}
 
+		// Parse the response
 		var response Judge0SubmissionResponse
 		err = json.NewDecoder(resp.Body).Decode(&response)
 		resp.Body.Close()
@@ -341,7 +373,9 @@ func (r *Judge0Runner) waitForResult(token string) (*Judge0SubmissionResponse, e
 			return nil, fmt.Errorf("error decoding status response: %v", err)
 		}
 
+		// Check if processing is complete (status >= 3)
 		if response.Status.ID >= 3 {
+			// Update the submission in the database with final status
 			updateData := map[string]interface{}{
 				"stdout":         response.Stdout,
 				"stderr":         response.Stderr,
@@ -361,13 +395,16 @@ func (r *Judge0Runner) waitForResult(token string) (*Judge0SubmissionResponse, e
 
 			if err := db.DB.Model(&db.Submission{}).Where("token = ?", token).Updates(updateData).Error; err != nil {
 				log.Printf("Failed to update submission in database: %v", err)
+				// Continue anyway, this is not critical
 			}
 
 			return &response, nil
 		}
 
+		// If still in queue or processing, wait and retry
 		time.Sleep(retryInterval)
 
+		// Increase retry interval after several attempts
 		if i > 10 {
 			retryInterval = 1 * time.Second
 		}
@@ -376,6 +413,7 @@ func (r *Judge0Runner) waitForResult(token string) (*Judge0SubmissionResponse, e
 	return nil, fmt.Errorf("timed out waiting for submission result after %d attempts", maxRetries)
 }
 
+// GetSubmission gets a submission by token
 func (r *Judge0Runner) GetSubmission(token string) (*Judge0SubmissionResponse, error) {
 	url := fmt.Sprintf(statusURL, token)
 
@@ -384,21 +422,25 @@ func (r *Judge0Runner) GetSubmission(token string) (*Judge0SubmissionResponse, e
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
+	// Add query parameter for base64 encoding
 	q := req.URL.Query()
 	q.Add("base64_encoded", "false")
-	q.Add("fields", "*")
+	q.Add("fields", "*") // Get all fields
 	req.URL.RawQuery = q.Encode()
 
+	// Send the request
 	resp, err := r.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching submission: %v", err)
 	}
 	defer resp.Body.Close()
 
+	// Check response status
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("error response from Judge0: %d", resp.StatusCode)
 	}
 
+	// Parse the response
 	var response Judge0SubmissionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, fmt.Errorf("error decoding response: %v", err)
@@ -407,6 +449,7 @@ func (r *Judge0Runner) GetSubmission(token string) (*Judge0SubmissionResponse, e
 	return &response, nil
 }
 
+// GetJudge0Status returns a human-readable status message for a Judge0 status ID
 func GetJudge0Status(statusID int) string {
 	switch statusID {
 	case StatusInQueue:
