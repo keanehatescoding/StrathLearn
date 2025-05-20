@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -60,6 +61,9 @@ func (h *APIHandler) GetUserSubmissions(w http.ResponseWriter, r *http.Request) 
 		Group("DATE(created_at), challenge_id").
 		Order("date ASC").
 		Find(&submissions)
+	profile := db.DB.Model(&db.Profile{}).
+		Where("user_id = ?", user.ID).Find(&db.Profile{})
+	log.Printf("Profile: %v", profile)
 
 	if result.Error != nil {
 		http.Error(w, "Failed to fetch submissions: "+result.Error.Error(), http.StatusInternalServerError)
@@ -123,6 +127,14 @@ func (h *APIHandler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 			"challengesSolved": stats.ChallengeSolved,
 			"firstSubmission":  stats.FirstSubmission,
 			"lastSubmission":   stats.LastSubmission,
+		},
+		"profile": map[string]interface{}{
+			"rank":             0,
+			"challengesSolved": 0,
+			"friends":          []string{},
+			"friendCount":      0,
+			"friendRequests":   []string{},
+			"streaks":          0,
 		},
 	})
 }

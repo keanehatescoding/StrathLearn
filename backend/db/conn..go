@@ -15,7 +15,7 @@ func Connect() (*gorm.DB, error) {
 		return nil, err
 	}
 
-	err = db.AutoMigrate(&Submission{})
+	err = db.AutoMigrate(&Submission{}, &Profile{})
 	if err != nil {
 		return nil, err
 	}

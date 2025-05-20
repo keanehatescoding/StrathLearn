@@ -25,3 +25,15 @@ type Submission struct {
 	UpdatedAt     time.Time      `gorm:"autoUpdateTime"`
 	DeletedAt     gorm.DeletedAt `gorm:"index"`
 }
+type Profile struct {
+	UserId           string    `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	Rank             int       `gorm:"not null;default:0"`
+	ChallengesSolved int       `gorm:"not null;default:0"`
+	Friends          []string  `gorm:"type:text[]"`
+	FriendCount      int       `gorm:"not null;default:0"`
+	FriendRequests   []string  `gorm:"type:text[]"`
+	CreatedAt        time.Time `gorm:"autoCreateTime"`
+	UpdatedAt        time.Time `gorm:"autoUpdateTime"`
+	Streaks          int       `gorm:"not null;default:0"`
+	LastStreakDate   time.Time `gorm:"autoCreateTime"`
+}
