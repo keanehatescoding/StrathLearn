@@ -129,12 +129,13 @@ func (h *APIHandler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
 			"lastSubmission":   stats.LastSubmission,
 		},
 		"profile": map[string]interface{}{
-			"rank":             0,
-			"challengesSolved": 0,
-			"friends":          []string{},
-			"friendCount":      0,
-			"friendRequests":   []string{},
-			"streaks":          0,
+			"rank":             db.Profile{}.Rank,
+			"challengesSolved": db.Profile{}.ChallengesSolved,
+			"friends":          db.Profile{}.Friends,
+			"friendCount":      db.Profile{}.FriendCount,
+			"friendRequests":   db.Profile{}.FriendRequests,
+			"streaks":          db.Profile{}.Streaks,
+			"lastStreakDate":   db.Profile{}.LastStreakDate,
 		},
 	})
 }
