@@ -98,7 +98,6 @@ func allTestsPassed(results []models.TestResult) bool {
 }
 
 func (h *APIHandler) TestAuth(w http.ResponseWriter, r *http.Request) {
-
 	user, ok := auth.GetUserFromContext(r)
 	if !ok {
 		http.Error(w, "User not found in context", http.StatusInternalServerError)
@@ -113,7 +112,13 @@ func (h *APIHandler) TestAuth(w http.ResponseWriter, r *http.Request) {
 			"name":          user.Name,
 			"email":         user.Email,
 			"emailVerified": user.EmailVerified,
+			"image":         user.Image,
 			"createdAt":     user.CreatedAt,
+			"updatedAt":     user.UpdatedAt,
+			"role":          user.Role,
+			"banned":        user.Banned,
+			"banReason":     user.BanReason,
+			"banExpires":    user.BanExpires,
 		},
 	})
 }

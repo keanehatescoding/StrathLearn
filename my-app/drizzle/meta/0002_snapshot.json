@@ -1,6 +1,6 @@
 {
-  "id": "7b3cc770-53e5-4074-91ca-295c37cc6fb3",
-  "prevId": "7a249c79-769f-4e49-bf11-26f6ef4b91e2",
+  "id": "6d8937ae-f0fa-4ff5-a3fb-f94c5d0e72d8",
+  "prevId": "a07b8c1c-5bd1-4d51-bb04-a598fa22e549",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -197,6 +197,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "impersonated_by": {
+          "name": "impersonated_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -257,12 +263,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "price_id": {
-          "name": "price_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "amount": {
           "name": "amount",
           "type": "integer",
@@ -273,8 +273,7 @@
           "name": "currency",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'USD'"
+          "notNull": true
         },
         "interval": {
           "name": "interval",
@@ -364,12 +363,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -381,6 +374,36 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "banned": {
+          "name": "banned",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ban_reason": {
+          "name": "ban_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ban_expires": {
+          "name": "ban_expires",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},

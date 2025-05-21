@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { jwt } from "better-auth/plugins";
+import { jwt,admin } from "better-auth/plugins";
 import { polar } from "@polar-sh/better-auth"; 
 import { Polar } from "@polar-sh/sdk"; 
 import db from "../db/index.js";
@@ -20,6 +20,7 @@ export const auth = betterAuth({
     }),
     plugins: [
         jwt(), 
+        admin(),
         polar({
             client,
             createCustomerOnSignUp: true,
