@@ -11,7 +11,7 @@ import (
 
 func GetLanguages(c *gin.Context) {
 
-	file, err := os.ReadFile("languages.json")
+	file, err := os.ReadFile("./languages.json")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read languages file"})
 		return
