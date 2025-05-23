@@ -8,7 +8,7 @@
 <div class="min-h-screen flex flex-col">
 	<ModeWatcher />
 	<Nav />
-	<main class="flex-1 pt-16">
+	<main class="flex-1">
 		<slot />
 	</main>
 	<Toaster />
