@@ -287,3 +287,121 @@ func (r *Judge0Runner) waitForResult(token string) (*Judge0SubmissionResponse, e
 
 	return nil, fmt.Errorf("timed out waiting for submission result after %d attempts", maxRetries)
 }
+
+// Add these methods to your Judge0Runner struct
+
+func (r *Judge0Runner) SubmitCodeExecution(code string, languageID int, input string, timeLimit, memoryLimit int) (string, error) {
+	submission := Judge0SubmissionRequest{
+		SourceCode:     code,
+		Language:       languageID,
+		Stdin:          input,
+		Base64Encoded:  false,
+		CPUTimeLimit:   float64(timeLimit),
+		MemoryLimit:    memoryLimit * 1024,
+		CompileTimeout: 10,
+	}
+
+	jsonData, err := json.Marshal(submission)
+	if err != nil {
+		return "", fmt.Errorf("error marshaling submission: %w", err)
+	}
+
+	log.Printf("Submitting code to Judge0: Language ID %d", languageID)
+
+	req, err := http.NewRequest("POST", submitURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("error creating request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("error making request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("failed to submit code, status: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var response struct {
+		Token string `json:"token"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return "", fmt.Errorf("error decoding response: %w", err)
+	}
+
+	return response.Token, nil
+}
+
+func (r *Judge0Runner) WaitForExecutionResult(token string) (*ExecutionResult, error) {
+	url := fmt.Sprintf(statusURL, token)
+	maxRetries := 20
+	retryDelay := 500 * time.Millisecond
+
+	for i := 0; i < maxRetries; i++ {
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("error creating status request: %w", err)
+		}
+
+		resp, err := r.client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("error checking submission status: %w", err)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("error reading response body: %w", err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("error status response: %d, body: %s", resp.StatusCode, string(body))
+		}
+
+		var response Judge0SubmissionResponse
+		if err := json.Unmarshal(body, &response); err != nil {
+			return nil, fmt.Errorf("error parsing response JSON: %w", err)
+		}
+
+		// Decode base64 responses
+		response.Stdout = decodeBase64(response.Stdout)
+		response.Stderr = decodeBase64(response.Stderr)
+		response.CompileOutput = decodeBase64(response.CompileOutput)
+		response.Message = decodeBase64(response.Message)
+
+		if response.Status.ID >= 3 { // Execution completed
+			executionTime, _ := strconv.ParseFloat(response.Time, 64)
+
+			result := &ExecutionResult{
+				Stdout:        strings.TrimSpace(response.Stdout),
+				Stderr:        strings.TrimSpace(response.Stderr),
+				CompileOutput: strings.TrimSpace(response.CompileOutput),
+				Message:       strings.TrimSpace(response.Message),
+				Status:        response.Status,
+				ExecutionTime: executionTime,
+				Memory:        response.Memory,
+			}
+
+			return result, nil
+		}
+
+		time.Sleep(retryDelay)
+	}
+
+	return nil, fmt.Errorf("timed out waiting for execution result")
+}
+
+// Add this struct to your runner package
+type ExecutionResult struct {
+	Stdout        string
+	Stderr        string
+	CompileOutput string
+	Message       string
+	Status        Judge0Status
+	ExecutionTime float64
+	Memory        int
+}
